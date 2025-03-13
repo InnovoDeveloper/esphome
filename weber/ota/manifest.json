@@ -1,13 +1,13 @@
 {
   "name": "Innovo Weber",
-  "version": "2025.3.2",
+  "version": "2025.3.13",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32-C3",
       "ota": {
-        "md5": "eeca19de4dcb507a817eea723f01dfb9",
+        "md5": "92a4f4cbe97b9724f037fde05019cf1f",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/weber/ota/innovo-webermini-probe.ota.bin",
         "summary": "Update Innovo Weber"
       }
