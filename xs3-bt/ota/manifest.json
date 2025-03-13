@@ -7,7 +7,7 @@
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "md5": "92a4f4cbe97b9724f037fde05019cf1f",
+        "md5": "35582e417327e347ee7f71311cd70632",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/xs3-bt/ota/innovo-btp-xs3.ota.bin",
         "summary": "Update Innovo XS3 BT Proxy"
       }
