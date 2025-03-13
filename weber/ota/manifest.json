@@ -7,7 +7,7 @@
     {
       "chipFamily": "ESP32-C3",
       "ota": {
-        "md5": "5fe21e4c0bc3b9391d1b11fdc7561788",
+        "md5": "31c668a14b077be0fb5888749554c900",
         "path": "/weber/ota/innovo-webermini-probe.factory.bin",
         "release_url": "http://github.com/InnovoDeveloper/esphome/raw/refs/heads/main",
         "summary": "Update Innovo Weber"
