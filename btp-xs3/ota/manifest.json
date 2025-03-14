@@ -1,13 +1,13 @@
 {
   "name": "Innovo XS3 BT",
-  "version": "2025.3.15",
+  "version": "2025.3.16",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "md5": "c52b043b6bec0387b5a9650ad88fbd4b",
+        "md5": "3c75b2b0084567f629bb834e9f695470",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/xs3-bt/ota/innovo-btp-xs3.ota.bin",
         "summary": "Update Innovo XS3 BT Proxy"
       }
