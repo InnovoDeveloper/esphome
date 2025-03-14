@@ -9,7 +9,7 @@ substitutions:
   # Project Name
   project_name: "Innovo. Blue Tooth Proxy & Repeater for Xiao S3"
   # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
-  project_version: "2025.03.13"
+  project_version: "2025.03.15"
   # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)
   dns_domain: ".local"
   # Set timezone of the smart plug. Useful if the plug is in a location different to the HA server. Can be entered in unix Country/Area format (i.e. "Australia/Sydney")
@@ -53,20 +53,8 @@ esphome:
     then:
       - light.turn_on:
           id: rgb_led
-          brightness: 10%
-      - delay: 1 s
-      - light.turn_on:
-          id: rgb_led
-          brightness: 25%
-      - delay: 1 s
-      - light.turn_on:
-          id: rgb_led
-          brightness: 50%
-      - delay: .25 s
-      - light.turn_on:
-          id: rgb_led
-          brightness: 10%
-      - delay: 1 s
+          flash_length: 100ms
+      - delay: 3 s
       - light.turn_off: rgb_led    
 preferences:
   flash_write_interval: 1min
@@ -85,14 +73,19 @@ api:
 ota:
   - platform: http_request
     id: ota_http_request
+    on_end:
+      then:
+      - light.turn_on:
+          id: rgb_led
+          flash_length: 5s  # Flash for 5 seconds
 
 http_request:
 
 update:
   - platform: http_request
     name: Firmware Update
-    update_interval: 1440min
-    source: https://raw.githubusercontent.com/InnovoDeveloper/esphome/refs/heads/main/xs3-bt/ota/manifest.json
+    update_interval: 60min
+    source: https://raw.githubusercontent.com/InnovoDeveloper/esphome/refs/heads/main/btp-xs3/ota/manifest.json
 
 wifi:
   # Allow rapid re-connection to previously connect WiFi SSID, skipping scan of all SSID
@@ -104,8 +97,14 @@ wifi:
   on_connect:
     - esp32_ble_tracker.start_scan:
         continuous: true
+    - light.turn_on:
+        id: rgb_led
+        flash_length: 1000ms  
   on_disconnect:
-    - esp32_ble_tracker.stop_scan:	
+    - esp32_ble_tracker.stop_scan:
+    - light.turn_on:
+        id: rgb_led
+        flash_length: 250ms
 
 captive_portal:
 # Allow provisioning Wi-Fi via serial
@@ -119,11 +118,7 @@ esp32_improv:
       - delay: 3s
       - light.turn_on:
           id: rgb_led
-          red: 0%
-          green: 100%
-          blue: 0%
-          brightness: 25%
-          effect: none
+          flash_length: 1000ms
 
 esp32_ble_tracker:
   scan_parameters:
@@ -152,6 +147,7 @@ button:
     id: shutdown_button
     icon: "mdi:shutdown"
     entity_category: config
+
 switch:
   - platform: factory_reset
     name: "Reset To Factory Defaults"
@@ -214,7 +210,6 @@ light:
     pin: 
       number: ${rgb_led_pin}
       inverted: true
-
 output:
   - platform: template
     id: status_output
@@ -226,7 +221,6 @@ output:
         then:
           - light.turn_on:
               id: rgb_led
-              brightness: 70%
         else:
           - light.turn_off: rgb_led
 
