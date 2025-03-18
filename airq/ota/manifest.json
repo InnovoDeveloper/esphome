@@ -1,13 +1,13 @@
 {
   "name": "Innovo AirQ with BTP",
-  "version": "2025.3.18",
+  "version": "2025.3.19",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "md5": "14b2a452c73ea4ea8171c7b74fc387b0",
+        "md5": "c4d163be0afd322f5354a029bc2a1b20",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/airq/ota/innovo-airq.ota.bin",
         "summary": "Update Innovo AirQ"
       }
