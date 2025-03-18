@@ -7,7 +7,7 @@
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "md5": "b703a0b74456fdd0a7221849fbda36de",
+        "md5": "e074ff7b54911a14e079508fabb95f8e",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/airq/ota/innovo-airq.ota.bin",
         "summary": "Update Innovo AirQ"
       }
