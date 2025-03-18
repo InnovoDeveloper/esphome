@@ -1,13 +1,11 @@
 # M5Stack AirQ ESPHome Configuration
 # ------------------------------------------
+# This YAML was adapted from a sample provided by joshblake87 at https://www.reddit.com/r/Esphome/comments/1e2q8jj/m5_stack_airq_air_quality_sensor/
 # Before using this configuration:
 # 1. Update the substitutions section with your values from Home Assistant:
-#    - encryption_key: 32-character key for API encryption
-#    - ota_password: Password for OTA updates
-#    - ap_password: Password for fallback AP mode (optional)
+
 # 2. Ensure your secrets.yaml contains:
-#    wifi_ssid: "YOUR_WIFI_SSID"
-#    wifi_password: "YOUR_WIFI_PASSWORD"
+
 # 3. Adjust other substitutions as needed (devicename, location, etc)
 
 substitutions:
@@ -21,7 +19,7 @@ substitutions:
   # Project Name
   project_name: "Innovo.AirQ"
   # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
-  project_version: "2025.03.16"
+  project_version: "2025.03.18"
   # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)
   dns_domain: ".local"
   # Set timezone of the smart plug. Useful if the plug is in a location different to the HA server. Can be entered in unix Country/Area format (i.e. "Australia/Sydney")
@@ -97,7 +95,7 @@ http_request:
 update:
   - platform: http_request
     name: Firmware Update
-    update_interval: 60min
+    update_interval: 1min
     source: https://raw.githubusercontent.com/InnovoDeveloper/esphome/refs/heads/main/airq/ota/manifest.json
 
 wifi:
@@ -149,16 +147,7 @@ web_server:
    include_internal: true
 
 
-i2c:
-  - id: bus_a
-    sda: GPIO11
-    scl: GPIO12
-    scan: true
-    frequency: 300kHz
-  - id: bus_b
-    sda: GPIO13
-    scl: GPIO15
-    scan: true
+
 spi:
   clk_pin: GPIO05
   mosi_pin: GPIO06
@@ -167,7 +156,7 @@ time:
   - platform: pcf8563
     address: 0x51
     i2c_id: bus_a
-    update_interval: 10min
+    update_interval: never
   - platform: homeassistant
     # instead try to synchronize via network repeatedly ...
     on_time_sync:
@@ -276,8 +265,72 @@ text_sensor:
       else {
         return {"unknown"};
       }
-
+i2c:
+  - id: bus_a
+    sda: 11
+    scl: 12
+    scan: true
+    frequency: 50kHz
+  - id: bus_b
+    sda: 13
+    scl: 15
+    scan: true
+    frequency: 50kHz
 sensor:
+  - platform: sht4x
+    i2c_id: bus_b
+    address: 0x44
+    temperature:
+      name: "SHT40 Temperature"
+      id: temperature_sht40
+      accuracy_decimals: 2
+      filters:
+        - lambda: |-
+            float MIN_VALUE = -40.0;
+            float MAX_VALUE = 100.0;
+            if (MIN_VALUE <= x && x <= MAX_VALUE) return x;
+            else return {};
+    humidity:
+      name: "SHT40 Relative Humidity"
+      id: humidity_sht40
+      accuracy_decimals: 2      
+      filters:
+        - lambda: |-
+            float MIN_VALUE = 0.0;
+            float MAX_VALUE = 100.0;
+            if (MIN_VALUE <= x && x <= MAX_VALUE) return x;
+            else return {};      
+  - platform: bmp280_i2c
+    i2c_id: bus_b
+    address: 0x76
+    temperature:
+      name: "BMP280 Temperature"
+      id: temp_bmp280
+      oversampling: 16x
+      accuracy_decimals: 2
+      filters:
+        - lambda: |-
+            float MIN_VALUE = -40.0;
+            float MAX_VALUE = 100.0;
+            if (MIN_VALUE <= x && x <= MAX_VALUE) return x;
+            else return {};      
+    pressure:
+      name: "BMP280 ressure"
+      id: "pressure_bmp280"
+      accuracy_decimals: 2      
+    update_interval: $sensor_interval
+  - platform: template
+    name: "VPD"
+    icon: "mdi:gauge"
+    id: gr2_ace_vpd
+    lambda: |-
+          return (((100 - id(humidity_sht40).state) / 100.0) * (0.6108 * exp((17.27 * id(temperature_sht40).state) / (id(temperature_sht40).state + 237.3))));
+    update_interval: $sensor_interval
+    unit_of_measurement: kPa
+    accuracy_decimals: 2
+    filters:
+      - filter_out: nan
+
   - platform: scd4x
     i2c_id: bus_a
     co2:
@@ -311,47 +364,23 @@ sensor:
     address: 0x62
     update_interval: $sensor_interval
 
-  #node uptime [s]
-  - platform: uptime
-    name: "Uptime"
-    id: uptime_sensor
-    type:
-      timestamp
-    entity_category: "diagnostic"
-    
-  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
-    name: "${friendly_name} WiFi db"
-    id: wifi_signal_db
-    update_interval: 60s
-    entity_category: "diagnostic"
-    device_class: signal_strength
-
-  - platform: copy # Reports the WiFi signal strength in %
-    source_id: wifi_signal_db
-    name: "${friendly_name} WiFi Percentage"
-    filters:
-      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
-    unit_of_measurement: "%"
-    entity_category: "diagnostic"
-    device_class: ""
-
   - platform: sen5x
-    i2c_id: bus_b
+    i2c_id: bus_a
     id: sen55
     pm_1_0:
-      name: "PM 1"
+      name: "SEN55 PM 1"
       id: PM1_0
       accuracy_decimals: 2
     pm_2_5:
-      name: "PM 2.5"
+      name: "SEN55 PM 2.5"
       id: PM2_5
       accuracy_decimals: 2
     pm_4_0:
-      name: "PM 4"
+      name: "SEN55 PM 4"
       id: PM4_0
       accuracy_decimals: 2
     pm_10_0:
-      name: "PM 10"
+      name: "SEN55 PM 10"
       id: PM10_0
       accuracy_decimals: 2
     temperature:
@@ -363,7 +392,7 @@ sensor:
       id: sen55_humidity
       accuracy_decimals: 2
     voc:
-      name: VOC
+      name: "SEN55 VOC"
       id: voc
       accuracy_decimals: 2
       algorithm_tuning:
@@ -374,7 +403,7 @@ sensor:
         std_initial: 50
         gain_factor: 230
     nox:
-      name: NOX
+      name: "SEN55 NOX"
       id: nox
       accuracy_decimals: 2
       algorithm_tuning:
@@ -394,10 +423,10 @@ sensor:
     update_interval: $sensor_interval
 
   - platform: template
-    name: Temperature
+    name: "SEN55 Temperature"
     id: temperature
     lambda: |-
-      return (( id(sen55_temperature).state + id(CO2_temperature).state ) / 2 ) - id(temperature_offset).state;
+      return ( id(sen55_temperature).state ) - id(temperature_offset).state;
     unit_of_measurement: "°C"
     icon: "mdi:thermometer"
     device_class: "temperature"
@@ -406,16 +435,39 @@ sensor:
     accuracy_decimals: 2
 
   - platform: template
-    name: Humidity
+    name: "SEN55 Humidity"
     id: humidity
     lambda: |-
-      return (( id(sen55_humidity).state + id(CO2_humidity).state ) / 2) - id(humidity_offset).state;
+      return ( id(sen55_humidity).state ) - id(humidity_offset).state;
     unit_of_measurement: "%"
     icon: "mdi:water-percent"
     device_class: "humidity"
     state_class: "measurement"
     update_interval: $sensor_interval
     accuracy_decimals: 2
+  #node uptime [s]
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    type:
+      timestamp
+    entity_category: "diagnostic"
+    
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "${friendly_name} WiFi db"
+    id: wifi_signal_db
+    update_interval: $sensor_interval
+    entity_category: "diagnostic"
+    device_class: signal_strength
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "${friendly_name} WiFi Percentage"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    entity_category: "diagnostic"
+    device_class: ""
 
 binary_sensor:
   - platform: gpio
@@ -522,7 +574,7 @@ display:
       inverted: false
     full_update_every: 6
     reset_duration: 2ms
-    update_interval: 10s
+    update_interval: $sensor_interval
     lambda: |-
       auto now = id(sntp_time).now().strftime("%I:%M%p %m/%d/%y").c_str();
       it.printf(it.get_width()/2, 0, id(f16), TextAlign::TOP_CENTER, "${location} @ %s", now);
