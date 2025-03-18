@@ -1,6 +1,6 @@
 {
   "name": "Innovo AirQ with BTP",
-  "version": "2025.3.19",
+  "version": "2025.03.19",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
