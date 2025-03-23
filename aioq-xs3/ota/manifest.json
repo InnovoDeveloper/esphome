@@ -7,7 +7,7 @@
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "md5": "eea1c351be90ba0ef338c0bfb28720f7",
+        "md5": "e0aea30acfd1066f81a25675fd17edb6",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/aioq-xs3/ota/innovo-airq.ota.bin",
         "summary": "Update Innovo AIO Air Quality"
       }
