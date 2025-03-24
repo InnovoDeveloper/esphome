@@ -7,7 +7,7 @@
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "md5": "fa09c0599e8c4eae7ff126d47e8e32ff",
+        "md5": "78fe1333eaa7f36ea12bcf903ccb2021",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/minis3zero-btp/ota/innovo-minis3zero-btp.ota.bin",
         "summary": "Update Innovo BTP"
       }
