@@ -1,0 +1,16 @@
+{
+  "name": "Innovo Mini s3zero BTP",
+  "version": "2025.03.24",
+  "home_assistant_domain": "esphome",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "ota": {
+        "md5": "a8e8aa4b738ab0896f7b42eef1c72c87",
+        "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/minis3zero-btp/ota/minis3zero-btp.ota.bin",
+        "summary": "Update Innovo BTP"
+      }
+    }
+  ]
+}
