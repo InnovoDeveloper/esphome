@@ -1,3 +1,5 @@
+# For Accuracy we use the BMP280 Temperature as Ambient Temperature and the Sen55 Humidity as Ambient Humidity
+# The Offset applies only to those two values accordingly
 substitutions:
   devicename: innovo-airq
   friendly_name: Innovo AirQ
@@ -15,7 +17,7 @@ substitutions:
   # Project Name
   project_name: "Innovo.AirQ"
   # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
-  project_version: "2025.03.271"
+  project_version: "2025.03.276"
   # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)
   dns_domain: ".local"
   # Set timezone of the smart plug. Useful if the plug is in a location different to the HA server. Can be entered in unix Country/Area format (i.e. "Australia/Sydney")
@@ -251,7 +253,7 @@ text_sensor:
       name: "${friendly_name} DNS Name"
 
   - platform: template
-    name: "VOC IAQ Classification"
+    name: "Rating IAQ VOC"
     id: iaq_voc
     icon: "mdi:checkbox-marked-circle-outline"
     lambda: |-
@@ -275,7 +277,7 @@ text_sensor:
       }
 
   - platform: template
-    name: "NOX IAQ Classification"
+    name: "Rating IAQ NOX"
     id: iaq_nox
     icon: "mdi:checkbox-marked-circle-outline"
     lambda: |-
@@ -321,9 +323,9 @@ sensor:
             float MIN_VALUE = -40.0;
             float MAX_VALUE = 100.0;
             if (MIN_VALUE <= x && x <= MAX_VALUE) return x;
-            else return {};
+            else return {};     
     humidity:
-      name: "SHT40 Relative Humidity"
+      name: "SHT40 Humidity"
       id: humidity_sht40
       accuracy_decimals: 2      
       filters:
@@ -331,12 +333,11 @@ sensor:
             float MIN_VALUE = 0.0;
             float MAX_VALUE = 100.0;
             if (MIN_VALUE <= x && x <= MAX_VALUE) return x;
-            else return {};      
+            else return {};                 
   - platform: bmp280_i2c
     i2c_id: bus_b
     address: 0x76
     temperature:
-      name: "BMP280 Temperature"
       id: temp_bmp280
       oversampling: 16x
       accuracy_decimals: 2
@@ -345,12 +346,28 @@ sensor:
             float MIN_VALUE = -40.0;
             float MAX_VALUE = 100.0;
             if (MIN_VALUE <= x && x <= MAX_VALUE) return x;
-            else return {};      
+            else return {};        
     pressure:
-      name: "BMP280 ressure"
+      name: "Ambient Pressure (BMP280)"
       id: "pressure_bmp280"
       accuracy_decimals: 2      
     update_interval: $sensor_interval
+  - platform: template
+    name: "Ambient Temp (BMP280)"
+    id: temp_adjusted_bmp280
+    lambda: |-
+      return ( id(temp_bmp280).state ) - id(temperature_offset).state;
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+    device_class: "temperature"
+    state_class: "measurement"
+    update_interval: $sensor_interval
+    accuracy_decimals: 2     
+  - platform: template
+    id: temp_adjusted_bmp280_f
+    icon: "mdi:thermometer-lines"
+    lambda: return id(temp_adjusted_bmp280).state * 9/5+32;
+    update_interval: 5s    
   - platform: template
     name: "VPD"
     icon: "mdi:gauge"
@@ -399,8 +416,9 @@ sensor:
   - platform: absolute_humidity
     id: abs_hum
     name: "Absolute Humidity" 
-    temperature: sen55_temperature
+    temperature: temp_adjusted_bmp280
     humidity: sen55_humidity
+    icon: "mdi:waves-arrow-up"
     
   - platform: sen5x
     i2c_id: bus_a
@@ -426,7 +444,6 @@ sensor:
       id: sen55_temperature
       accuracy_decimals: 2
     humidity:
-      name: "SEN55 Humidity"
       id: sen55_humidity
       accuracy_decimals: 2
     voc:
@@ -461,19 +478,7 @@ sensor:
     update_interval: $sensor_interval
 
   - platform: template
-    name: "SEN55 Temperature"
-    id: temperature
-    lambda: |-
-      return ( id(sen55_temperature).state ) - id(temperature_offset).state;
-    unit_of_measurement: "°C"
-    icon: "mdi:thermometer"
-    device_class: "temperature"
-    state_class: "measurement"
-    update_interval: $sensor_interval
-    accuracy_decimals: 2
-
-  - platform: template
-    name: "SEN55 Humidity"
+    name: "Ambient Humidity (SEN55)"
     id: humidity
     lambda: |-
       return ( id(sen55_humidity).state ) - id(humidity_offset).state;
@@ -485,7 +490,7 @@ sensor:
     accuracy_decimals: 2
     
   - platform: template
-    name: "Dew Point"
+    name: "Ambient Dew Point"
     id: dewPoint
     update_interval: 30s
     device_class: temperature
@@ -497,11 +502,14 @@ sensor:
         const float lambda = 243.12;                    // (degrees C)
 
         float RH = id(humidity).raw_state;              // Relative Humidity
-        float T = id(temperature).raw_state;            // Temperature in (degrees C)
+        float T = id(temp_adjusted_bmp280).raw_state;            // Temperature in (degrees C)
 
         float H = log( RH/100 ) + beta*T/(lambda+T);
         return (lambda)*H/(beta - H);
-        
+  - platform: template
+    id: dewPoint_f
+    lambda: return id(dewPoint).state * 9/5+32;
+    update_interval: 5s           
   #node uptime [s]
   - platform: uptime
     name: "Uptime"
@@ -528,7 +536,7 @@ sensor:
 
 text:  
   - platform: template
-    name: Room
+    name: Area
     id: device_area
     mode: text
     optimistic: true
@@ -608,7 +616,7 @@ number:
     entity_category: "config"
 
   - platform: template
-    name: Humidity Offset
+    name: Offset-Humidity
     id: humidity_offset
     restore_value: true
     initial_value: 0.0
@@ -622,7 +630,7 @@ number:
     mode: box
 
   - platform: template
-    name: Temperature Offset
+    name: Offset-Temperature
     id: temperature_offset
     restore_value: true
     initial_value: 0.0
@@ -635,7 +643,7 @@ number:
     step: 0.1
     mode: box
 interval:
-  - interval: 10s
+  - interval: 15s
     then:
       - display.page.show_next: my_display
       - component.update: my_display
@@ -663,40 +671,48 @@ display:
           it.printf(0, 98, id(f24), TextAlign::TOP_LEFT, "NOX: %s", id(iaq_nox).state.c_str());
           it.printf(0, 123, id(f24), TextAlign::TOP_LEFT, "VOC: %s", id(iaq_voc).state.c_str());
           it.printf(0, 148, id(f24), TextAlign::TOP_LEFT, "ABS HUM: %.1f", id(abs_hum).state);
-          it.printf(0, 173, id(f24), TextAlign::TOP_LEFT, "DEW POINT: %.1f", id(dewPoint).state);    
+          it.printf(0, 173, id(f24), TextAlign::TOP_LEFT, "DEW POINT: %.1f", id(dewPoint_f).state);    
       - id: page2       
         lambda: |-
           auto now = id(sntp_time).now().strftime("%I:%M%p %m/%d/%y").c_str();
           //it.printf(it.get_width()/2, 0, id(f16), TextAlign::TOP_CENTER, "id(device_area) %s", now);
 
-          it.print(0, 23, id(f24), TextAlign::TOP_LEFT, "PM 1: ");
-          it.print(0, 48, id(f24), TextAlign::TOP_LEFT, "PM 2.5: ");
-          it.print(0, 73, id(f24), TextAlign::TOP_LEFT, "PM 4: ");
-          it.print(0, 98, id(f24), TextAlign::TOP_LEFT, "PM 10: ");
-          it.print(0, 123, id(f24), TextAlign::TOP_LEFT, "CO2: ");
-          it.print(0, 148, id(f24), TextAlign::TOP_LEFT, "VOC: ");
-          it.print(0, 173, id(f24), TextAlign::TOP_LEFT, "NOx: ");
+          it.print(0, 0, id(f20), TextAlign::TOP_LEFT, "TEMP: ");
+          it.print(0, 20, id(f20), TextAlign::TOP_LEFT, "HUMID: ");
+          it.print(0, 40, id(f20), TextAlign::TOP_LEFT, "PM 1: ");
+          it.print(0, 60, id(f20), TextAlign::TOP_LEFT, "PM 2.5: ");
+          it.print(0, 80, id(f20), TextAlign::TOP_LEFT, "PM 4: ");
+          it.print(0, 100, id(f20), TextAlign::TOP_LEFT, "PM 10: ");
+          it.print(0, 120, id(f20), TextAlign::TOP_LEFT, "CO2: ");
+          it.print(0, 140, id(f20), TextAlign::TOP_LEFT, "VOC: ");
+          it.print(0, 160, id(f20), TextAlign::TOP_LEFT, "NOx: ");
 
-          it.printf(it.get_width() - 50, 23, id(f24), TextAlign::TOP_RIGHT, "%.1f", id(PM1_0).state);
-          it.print(it.get_width(), 23, id(f18), TextAlign::TOP_RIGHT, "µg/m³");
+          it.printf(it.get_width() - 50, 0, id(f20), TextAlign::TOP_RIGHT, "%.1f", id(temp_adjusted_bmp280_f).state);
+          it.print(it.get_width(), 0, id(f18), TextAlign::TOP_RIGHT, "°F");
 
-          it.printf(it.get_width() - 50, 48, id(f24), TextAlign::TOP_RIGHT, "%.1f", id(PM2_5).state);
-          it.print(it.get_width(), 48, id(f18), TextAlign::TOP_RIGHT, "µg/m³");
+          it.printf(it.get_width() - 50, 20, id(f20), TextAlign::TOP_RIGHT, "%.1f", id(humidity).state);
+          it.print(it.get_width(), 20, id(f18), TextAlign::TOP_RIGHT, "%");
 
-          it.printf(it.get_width() - 50, 73, id(f24), TextAlign::TOP_RIGHT, "%.1f", id(PM4_0).state);
-          it.print(it.get_width(), 73, id(f18), TextAlign::TOP_RIGHT, "µg/m³");
+          it.printf(it.get_width() - 50, 40, id(f20), TextAlign::TOP_RIGHT, "%.1f", id(PM1_0).state);
+          it.print(it.get_width(), 40, id(f18), TextAlign::TOP_RIGHT, "µg/m³");
 
-          it.printf(it.get_width() - 50, 98, id(f24), TextAlign::TOP_RIGHT, "%.1f", id(PM10_0).state);
-          it.print(it.get_width(), 98, id(f18), TextAlign::TOP_RIGHT, "µg/m³");
+          it.printf(it.get_width() - 50, 60, id(f20), TextAlign::TOP_RIGHT, "%.1f", id(PM2_5).state);
+          it.print(it.get_width(), 60, id(f18), TextAlign::TOP_RIGHT, "µg/m³");
 
-          it.printf(it.get_width() - 50, 123, id(f24), TextAlign::TOP_RIGHT, "%.0f", id(CO2).state);
-          it.print(it.get_width(), 123, id(f18), TextAlign::TOP_RIGHT, "ppm");
+          it.printf(it.get_width() - 50, 80, id(f20), TextAlign::TOP_RIGHT, "%.1f", id(PM4_0).state);
+          it.print(it.get_width(), 80, id(f18), TextAlign::TOP_RIGHT, "µg/m³");
 
-          it.printf(it.get_width() - 50, 148, id(f24), TextAlign::TOP_RIGHT, "%.0f", id(voc).state);
-          it.print(it.get_width(), 148, id(f18), TextAlign::TOP_RIGHT, "ppb");
+          it.printf(it.get_width() - 50, 100, id(f20), TextAlign::TOP_RIGHT, "%.1f", id(PM10_0).state);
+          it.print(it.get_width(), 100, id(f18), TextAlign::TOP_RIGHT, "µg/m³");
 
-          it.printf(it.get_width() - 50, 173, id(f24), TextAlign::TOP_RIGHT, "%.0f", id(nox).state);
-          it.print(it.get_width(), 173, id(f18), TextAlign::TOP_RIGHT, "ppb");
+          it.printf(it.get_width() - 50, 120, id(f20), TextAlign::TOP_RIGHT, "%.0f", id(CO2).state);
+          it.print(it.get_width(), 120, id(f18), TextAlign::TOP_RIGHT, "ppm");
+
+          it.printf(it.get_width() - 50, 140, id(f20), TextAlign::TOP_RIGHT, "%.0f", id(voc).state);
+          it.print(it.get_width(), 140, id(f18), TextAlign::TOP_RIGHT, "ppb");
+
+          it.printf(it.get_width() - 50, 160, id(f20), TextAlign::TOP_RIGHT, "%.0f", id(nox).state);
+          it.print(it.get_width(), 160, id(f18), TextAlign::TOP_RIGHT, "ppb");
       - id: page3    
         lambda: |-
           it.printf(0, 0, id(f48), TextAlign::TOP_LEFT, "INNOVO");
@@ -718,6 +734,18 @@ font:
         'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
     id: f16
     size: 16
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+    id: f20
+    size: 20    
   - file:
       type: gfonts
       family: Noto Sans Display
