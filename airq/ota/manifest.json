@@ -1,13 +1,13 @@
 {
   "name": "Innovo AirQ",
-  "version": "2025.03.272",
+  "version": "2025.03.274",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "md5": "f7fb2baaea43aca38947cd678ddd2c4c",
+        "md5": "9e65d52eded7c215f0481755b2b2a4c1",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/airq/ota/innovo-airq.ota.bin",
         "summary": "Update Innovo AirQ Stamp"
       }
