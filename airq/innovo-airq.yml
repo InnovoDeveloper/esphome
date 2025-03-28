@@ -15,7 +15,7 @@ substitutions:
   # Project Name
   project_name: "Innovo.AirQ"
   # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
-  project_version: "2025.03.270"
+  project_version: "2025.03.271"
   # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)
   dns_domain: ".local"
   # Set timezone of the smart plug. Useful if the plug is in a location different to the HA server. Can be entered in unix Country/Area format (i.e. "Australia/Sydney")
@@ -47,7 +47,10 @@ esphome:
   name: ${devicename}
   friendly_name: ${friendly_name}
   area: ${room}
-  min_version: 2025.3.2                             
+  min_version: 2025.3.2
+  project:
+    name: "${project_name}"
+    version: "${project_version}"                           
   platformio_options:
     board_build.mcu: esp32s3
     board_build.name: "M5Stack StampS3"
@@ -701,6 +704,7 @@ display:
           it.printf(0, 98, id(f24), TextAlign::TOP_LEFT, id(ip_add).state.c_str());
           it.printf(0, 123, id(f24), TextAlign::TOP_LEFT, id(mac_add).state.c_str());
           it.printf(0, 148, id(f24), TextAlign::TOP_LEFT, id(ssid_name).state.c_str()); 
+          it.printf(0, 173, id(f24), TextAlign::TOP_LEFT, "${project_version}"); 
 font:
   - file:
       type: gfonts
