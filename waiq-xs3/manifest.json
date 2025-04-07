@@ -1,1 +1,16 @@
-manifest
+{
+  "name": "Innovo Winson Environmental Sensor for Xiao S3",
+  "version": "2025.04.060",
+  "home_assistant_domain": "esphome",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "ota": {
+        "md5": "78fe1333eaa7f36ea12bcf903ccb2021",
+        "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/waiq-xs3/ota/innovo-waiq-xs3.ota.bin",
+        "summary": "Update Innovo waiq-xs3"
+      }
+    }
+  ]
+}
