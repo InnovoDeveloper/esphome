@@ -1,0 +1,269 @@
+substitutions:
+  devicename: display
+  friendly_name: LED Matrix Display
+  board: esp32dev
+  ldr_pin: GPIO36
+  matrix_pin: GPIO16
+ # Allows ESP device to be automatically linked to an 'Area' in Home Assistant. Typically used for areas such as 'Lounge Room', 'Kitchen' etc
+  room: ""
+  # Description as appears in ESPHome & top of webserver page
+  device_description: "Innovo Voice Assistant"
+  # Project Name
+  project_name: "Innovo.Innovo Voice Assistant"
+  # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
+  project_version: "v1.0.0"
+  # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)  
+
+esphome:
+  comment: "EHMTXv2 from LuBeDa"
+  name: $devicename 
+  project:
+    name: "${project_name}"
+    version: "${project_version}"
+
+switch:
+  - platform: template
+    name: "Auto-Adjust Brightness"
+    id: switch_autobrightness
+    icon: mdi:brightness-auto
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: |-
+      if (id(aab_enable)) {
+        return true;
+      } else {
+        return false;
+      }
+    turn_on_action:
+      lambda: |-
+        id(aab_enable) = true;
+    turn_off_action:
+      lambda: |-
+        id(aab_enable) = false;
+  - platform: template
+    name: "$devicename"
+    icon: "mdi:power"
+    restore_mode: ALWAYS_ON
+    lambda: |-
+      return id(rgb8x32)->show_display;
+    turn_on_action:
+      lambda: |-
+        id(rgb8x32)->set_display_on();
+    turn_off_action:
+      lambda: |-
+        id(rgb8x32)->set_display_off();
+
+number:
+  - platform: template
+    name: "$devicename brightness"
+    min_value: 5
+    max_value: 255
+    step: 1
+    lambda: |-
+      return id(rgb8x32)->get_brightness();
+    set_action:
+      lambda: |-
+        id(rgb8x32)->set_brightness(x);
+
+globals:
+  # aab = auto-adjustable brightness
+  - id: aab_enable
+    type: "bool"
+    restore_value: true
+    initial_value: "true"
+  - id: aab_add
+    type: int
+    initial_value: '10'
+  - id: aab_max
+    type: int
+    initial_value: '220'
+  - id: aab_min
+    type: int
+    initial_value: '20'
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/lubeda/EspHoMaTriXv2
+      ref: 2024.12.1
+    refresh: 60s 
+    components: [ ehmtxv2 ]  
+
+esp32:
+  board: esp32dev
+
+font:
+  # Font included in this folder
+  - file: Matrix-Fonts/8-series/MatrixLight8.bdf
+    id: default_font
+    glyphs:  |
+      ! "#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz°
+  - file: Matrix-Fonts/6-series/MatrixChunky6.bdf
+    id: special_font
+    glyphs:  |
+      ! "#$%&'()*+,-./0123456789:APMTapmt
+
+binary_sensor:
+  - platform: status
+    name: "$devicename Status"
+
+logger:
+  level: WARN
+
+api:
+
+
+sensor:
+  - platform: adc
+    id: light_sensor
+    name: "$devicename Illuminance"
+    pin: $ldr_pin
+    update_interval: 2s
+    attenuation: auto
+    unit_of_measurement: lx
+    device_class: illuminance
+    accuracy_decimals: 0
+    filters:
+      - lambda: |-
+          return ((x / 10000.0) * 2000000.0 + 25) ;
+    on_value:
+      then:
+        - lambda: |-
+            if ( id(aab_enable) ) {
+              int n = x / 4 + id(aab_add); // new_value
+              if (n > id(aab_max)) n = id(aab_max);
+              if (n < id(aab_min)) n = id(aab_min);
+              int c = id(rgb8x32)->get_brightness(); // current value
+              c = c>0?c:1 ; 
+              int d = (n - c) * 100 / c; // diff in %
+              if ( abs(d) > 2 ) id(rgb8x32)->set_brightness(n);
+            }
+      
+ota:
+  - platform: esphome
+    password: "12345678"
+
+wifi:
+  # Allow rapid re-connection to previously connect WiFi SSID, skipping scan of all SSID
+  fast_connect: false
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "${friendly_name} WiFi Setup"
+    ap_timeout: 15s
+
+web_server:
+
+light:
+  - platform: neopixelbus
+    id: ehmtx_light
+    type: GRB
+    internal: true
+    variant: WS2812
+    pin: $matrix_pin
+    num_leds: 256
+    color_correct: [30%, 30%, 30%]
+    gamma_correct: 2.0
+    name: "$devicename Light"
+    restore_mode: ALWAYS_OFF
+
+time:
+  - platform: homeassistant
+    id: ehmtx_time
+
+display:
+  - platform: addressable_light
+    id: ehmtx_display
+    addressable_light_id: ehmtx_light
+    width: 32
+    height: 8
+    pixel_mapper: |-
+      if (x % 2 == 0) {
+        return (x * 8) + y;
+      }
+      return (x * 8) + (7 - y);
+    update_interval: 16ms
+    auto_clear_enabled: true
+    lambda: |-
+     // it.line(0, 0, 3, 0);
+     // it.line(8,0,11,0);
+     // it.line(16,0,19,0);
+      id(rgb8x32)->tick();
+      id(rgb8x32)->draw();
+    rotation: 180°
+
+animation:
+  - id: animation_black
+    file: EspHoMaTriXv2/tests/1pixel.gif
+
+image:
+  - id: image_black
+    file: EspHoMaTriXv2/tests/1pixel.gif
+
+ehmtxv2:
+  id: rgb8x32
+  icons2html: true
+  matrix_component: ehmtx_display
+  time_component: ehmtx_time
+  show_seconds: false
+  show_dow: false
+  #show_date: false
+  rtl: true
+  clock_interval: 0
+  scroll_count: 1 
+  scroll_interval: 80 
+  default_font_id: default_font
+  default_font_yoffset: 8
+  special_font_id: special_font
+  special_font_yoffset: 6
+  #allow_empty_screen: true
+  
+  icons: 
+    - id: error
+      lameid: 40530
+    - id: home_assistant
+      lameid: 47693
+    - id: temperature
+      lameid: 2056
+    - id: lightbulb
+      lameid: 1762
+    - id: music
+      lameid: 45625
+    - id: phone
+      lameid: 1232
+    - id: car
+      lameid: 2819
+    - id: sleep8x32
+      url: https://user-images.githubusercontent.com/16407309/224850723-634c9b2d-55d9-44f2-9f93-765c0485b090.gif 
+    - id: tornado
+      lameid: 2153
+    - id: sleeping
+      lameid: 6232
+    - id: biking
+      lameid: 22841
+    - id: running
+      lameid: 32199
+    - id: obacht
+      lameid: 15303
+    - id: klo
+      lameid: 53659
+    - id: w_rain
+      lameid: 72
+    - id: w_sunny
+      lameid: 2282
+    - id: w_cloudy
+      lameid: 2283
+    - id: w_partly_cloudy
+      lameid: 2286
+    - id: w_clear_night
+      lameid: 13345
+    - id: sunset
+      lameid: 2859
+    - id: sunrise
+      lameid: 2860
+    
+
+  on_next_screen:
+    - homeassistant.event:
+        event: esphome.new_screen
+        data_template:
+          iconname: !lambda "return icon.c_str();"
+          text: !lambda "return text.c_str();"

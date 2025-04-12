@@ -1,0 +1,846 @@
+substitutions: 
+  devicename: innovo-aioq-xs3
+  friendly_name: Innovo AIOQ
+  espidf_version: "5.3.0"
+  platformio_version: "6.8.1"
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 8MB
+  rgb_led_pin: GPIO21
+  sensor_interval: 15s
+ # Allows ESP device to be automatically linked to an 'Area' in Home Assistant. Typically used for areas such as 'Lounge Room', 'Kitchen' etc
+  room: ""
+  # Description as appears in ESPHome & top of webserver page
+  device_description: "Innovo All-in-One Environmental Sensor for Xiao S3"
+  # Project Name
+  project_name: "Innovo.AIOQ for Xiao S3"
+  # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
+  project_version: "2025.03.292"
+  # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)
+  dns_domain: ".local"
+  # Set timezone of the smart plug. Useful if the plug is in a location different to the HA server. Can be entered in unix Country/Area format (i.e. "Australia/Sydney")
+  timezone: ""
+  # Set the duration between the sntp service polling ntp.org servers for an update
+  sntp_update_interval: 6h
+  # Network time servers for your region, enter from lowest to highest priority. To use local servers update as per zones or countries at: https://www.ntppool.org/zone/@
+  sntp_server_1: "0.pool.ntp.org"
+  sntp_server_2: "1.pool.ntp.org"
+  sntp_server_3: "2.pool.ntp.org"
+  # Enables faster network connections, with last connected SSID being connected to and no full scan for SSID being undertaken
+  wifi_fast_connect: "false"
+  # Define logging level: NONE, ERROR, WARN, INFO, DEBUG (Default), VERBOSE, VERY_VERBOSE
+  log_level: "DEBUG"
+  # Enable or disable the use of IPv6 networking on the device
+  ipv6_enable: "false"
+
+esp32:
+  board: $board
+  variant: $variant
+  flash_size: $flash_size
+  framework:
+    type: esp-idf
+    version: $espidf_version
+    platform_version: $platformio_version
+
+esphome:
+  name: ${devicename}
+  friendly_name: $friendly_name
+  name_add_mac_suffix: true
+  comment: "${device_description}"
+  area: "${room}"
+  min_version: 2025.3.2
+  project:
+    name: "${project_name}"
+    version: "${project_version}"
+  platformio_options:
+    board_build.flash_mode: qio
+  
+  on_boot:
+  - priority: -100
+    then:
+      - light.turn_on:
+          id: rgb_led
+          flash_length: 100ms
+      - delay: 3 s
+      - light.turn_off: rgb_led
+      - display.page.show: page1
+      - delay: 10s
+      - display.page.show: page2
+  - priority: 800
+    then:
+      - pcf8563.read_time        
+preferences:
+  flash_write_interval: 1min
+  
+# Enable logging
+logger:
+  level: debug
+  initial_level: debug
+  logs:
+    sensor: WARN  # avoids logging debug sensor updates
+select:
+  - platform: logger
+    id: logger_select
+    name: Logger Level
+    disabled_by_default: false 
+mdns:
+  disabled: false                  
+network:
+  enable_ipv6: ${ipv6_enable}
+ 
+# Enable Home Assistant API
+api:
+
+ota:
+  - platform: http_request
+    id: ota_http_request
+    on_end:
+      then:
+      - light.turn_on:
+          id: rgb_led
+          flash_length: 5s  # Flash for 5 seconds
+
+http_request:
+
+update:
+  - platform: http_request
+    name: Firmware Update
+    update_interval: 60min
+    source: https://raw.githubusercontent.com/InnovoDeveloper/esphome/refs/heads/main/aioq-xs3/ota/manifest.json
+
+wifi:
+  # Allow rapid re-connection to previously connect WiFi SSID, skipping scan of all SSID
+  fast_connect: "${wifi_fast_connect}"
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "${friendly_name} WiFi Setup"
+    ap_timeout: 60s
+  on_connect:
+    - light.turn_on:
+        id: rgb_led
+        flash_length: 1000ms  
+
+
+captive_portal:
+# Allow provisioning Wi-Fi via serial
+improv_serial:
+
+esp32_improv:
+  authorizer: none
+  on_provisioned:
+    then:
+      - logger.log: "Device provisioned via BLE"
+      - delay: 3s
+      - light.turn_on:
+          id: rgb_led
+          flash_length: 1000ms
+
+# Example configuration entry
+web_server:
+  port: 80
+# Example configuration entry
+button:
+  - platform: safe_mode
+    name: "Safe Mode"
+    internal: false
+    entity_category: config
+    
+  - platform: restart
+    name: "Restart"
+    id: restart_button
+    icon: "mdi:restart"
+    entity_category: config    
+    
+  - platform: shutdown
+    name: "Shutdown"
+    id: shutdown_button
+    icon: "mdi:shutdown"
+    entity_category: config
+
+  - platform: template
+    name: "SEN55 Force Manual Clean"
+    entity_category: "config"
+    on_press:
+      then:
+        - sen5x.start_fan_autoclean: sen55
+
+switch:
+  - platform: factory_reset
+    name: "Reset To Factory Defaults"
+    icon: "mdi:restart"
+    id: factory_reset_switch
+
+i2c:
+  id: bus_a
+  sda: GPIO5
+  scl: GPIO6
+
+sensor:
+  #node uptime [s]
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    type:
+      timestamp
+    entity_category: "diagnostic"
+
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "${friendly_name} WiFi db"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+    device_class: signal_strength
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "${friendly_name} WiFi Percentage"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    entity_category: "diagnostic"
+    device_class: ""
+
+  - platform: absolute_humidity
+    id: abs_hum
+    name: "Absolute Humidity" 
+    temperature: sen55_temperature
+    humidity: sen55_humidity
+#Sen55 
+  - platform: sen5x
+    i2c_id: bus_a
+    id: sen55
+    pm_1_0:
+      name: "PM 1"
+      id: PM1_0
+      accuracy_decimals: 2
+    pm_2_5:
+      name: "PM 2.5"
+      id: PM2_5
+      accuracy_decimals: 2
+      device_class: pm25
+      filters:
+      - lambda: !lambda |-
+          float result = 0.0;
+          if (x == 0.0) {
+            result = 0.0;
+          } else if (x < 30.0) {
+            result = (0.524 * x) - (0.0862 * id(humidity).state) + 5.75;
+          } else if (x < 50.0) {
+            result = (0.786 * (x / 20 - 3/2) + 0.524 * (1 - (x / 20 - 3/2))) * x - (0.0862 * id(humidity).state) + 5.75;
+          } else if (x < 210.0) {
+            result = (0.786 * x) - (0.0862 * id(humidity).state) + 5.75;
+          } else if (x < 260.0) {
+            result = (0.69 * (x / 50 - 21/5) + 0.786 * (1 - (x / 50 - 21/5))) * x - (0.0862 * id(humidity).state * (1 - (x / 50 - 21/5))) + (2.966 * (x / 50 - 21/5)) + (5.75 * (1 - (x / 50 - 21/5))) + (8.84 * pow(10,-4) * pow(x,2) * (x / 50 - 21/5));
+          } else {
+            result = 2.966 + (0.69 * x) + (8.84 * pow(10,-4) * pow(x,2));
+          }
+          if (result <= 0.0) {
+            return 0.0;
+          } else {
+            return result;
+          }  
+    pm_4_0:
+      name: "PM 4"
+      id: PM4_0
+      accuracy_decimals: 2
+    pm_10_0:
+      name: "PM 10"
+      id: PM10_0
+      accuracy_decimals: 2
+    temperature:
+      name: "Temperature - Raw"
+      id: sen55_temperature
+      accuracy_decimals: 2
+      unit_of_measurement: "°C"      
+    humidity:
+      name: "Humidity - Raw"
+      id: sen55_humidity
+      accuracy_decimals: 2
+    voc:
+      name: "VOC"
+      id: voc
+      accuracy_decimals: 2
+      algorithm_tuning:
+        index_offset: 100
+        learning_time_offset_hours: 12
+        learning_time_gain_hours: 12
+        gating_max_duration_minutes: 180
+        std_initial: 50
+        gain_factor: 230
+    nox:
+      name: "NOX"
+      id: nox
+      accuracy_decimals: 2
+      algorithm_tuning:
+        index_offset: 100
+        learning_time_offset_hours: 12
+        learning_time_gain_hours: 12
+        gating_max_duration_minutes: 180
+        std_initial: 50
+        gain_factor: 230
+    temperature_compensation:
+      offset: 0
+      normalized_offset_slope: 0
+      time_constant: 0
+    acceleration_mode: low
+    store_baseline: true
+    address: 0x69
+    update_interval: $sensor_interval
+
+  - platform: template
+    name: "Temperature"
+    id: temperature
+    lambda: |-
+      return ( id(sen55_temperature).state ) - id(temperature_offset).state;
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+    device_class: "temperature"
+    state_class: "measurement"
+    update_interval: $sensor_interval
+    accuracy_decimals: 2
+    
+  - platform: template
+    id: temperature_f
+    icon: "mdi:thermometer-lines"
+    lambda: return id(temperature).state * 9/5+32;
+    update_interval: $sensor_interval
+    unit_of_measurement: "°C" 
+    
+  - platform: template
+    name: "AQI (2.5)"
+    id: pm_2_5_aqi
+    update_interval: 5min
+    device_class: aqi
+    icon: mdi:air-filter
+    accuracy_decimals: 0
+    filters:
+    - skip_initial: 1
+    lambda: !lambda |-
+      // 2024 update from EPA https://www.epa.gov/system/files/documents/2024-02/pm-naaqs-air-quality-index-fact-sheet.pdf
+      // https://en.wikipedia.org/wiki/Air_quality_index#Computing_the_AQI
+      // Borrowed from https://github.com/kylemanna/sniffer/blob/master/esphome/sniffer_common.yaml
+      if (id(PM2_5).state <= 9.0) {
+      // good
+      return((50.0 - 0.0) / (9.0 - 0.0) * (id(PM2_5).state - 0.0) + 0.0);
+      } else if (id(PM2_5).state <= 35.4) {
+      // moderate
+      return((100.0 - 51.0) / (35.4 - 9.1) * (id(PM2_5).state - 9.1) + 51.0);
+      } else if (id(PM2_5).state <= 55.4) {
+      // usg
+      return((150.0 - 101.0) / (55.4 - 35.5) * (id(PM2_5).state - 35.5) + 101.0);
+      } else if (id(PM2_5).state <= 125.4) {
+      // unhealthy
+      return((200.0 - 151.0) / (125.4 - 55.5) * (id(PM2_5).state - 55.5) + 151.0);
+      } else if (id(PM2_5).state <= 225.4) {
+      // very unhealthy
+      return((300.0 - 201.0) / (225.4 - 125.5) * (id(PM2_5).state - 125.5) + 201.0);
+      } else if (id(PM2_5).state <= 325.4) {
+      // hazardous
+      return((500.0 - 301.0) / (325.4 - 225.5) * (id(PM2_5).state - 225.5) + 301.0);
+      } else {
+      return(500);
+      }
+    disabled_by_default: false
+    force_update: false
+  - platform: template
+    name: "Humidity"
+    id: humidity
+    lambda: |-
+      return ( id(sen55_humidity).state ) - id(humidity_offset).state;
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    device_class: "humidity"
+    state_class: "measurement"
+    update_interval: $sensor_interval
+    accuracy_decimals: 2
+
+  - platform: template
+    name: "Dew Point"
+    id: dewPoint
+    update_interval: 30s
+    device_class: temperature
+    unit_of_measurement: "°C"
+    accuracy_decimals: 2                                # formula is uncertain up to 0.35 degrees C = 0.63 degrees F for usual indoor temperatures
+    lambda: |- 
+        const float alpha = 6.112;                      // (hPa)
+        const float beta = 17.62;
+        const float lambda = 243.12;                    // (degrees C)
+
+        float RH = id(humidity).raw_state;              // Relative Humidity
+        float T = id(temperature).raw_state;            // Temperature in (degrees C)
+
+        float H = log( RH/100 ) + beta*T/(lambda+T);
+        return (lambda)*H/(beta - H);
+
+text_sensor:
+  - platform: version
+    name: "${friendly_name} Version"
+   #  Creates a sensor showing when the device was last restarted
+  - platform: template
+    name: 'Last Restart'
+    id: device_last_restart
+    icon: mdi:clock
+    entity_category: diagnostic
+#    device_class: timestamp
+  - platform: wifi_info
+    ip_address:
+      id: ip_add
+      name: "${friendly_name} IP Address"
+    ssid:
+      id: ssid_name
+      name: "${friendly_name} Connected SSID"
+    bssid:
+      name: "${friendly_name} Connected BSSID"
+    mac_address:
+      id: mac_add
+      name: "${friendly_name} Mac Wifi Address"
+      
+  - platform: template
+    name: "INDEX - AQI"
+    id: aqi
+    icon: "mdi:checkbox-marked-circle-outline"
+    lambda: |-
+      if (int(id(pm_2_5_aqi).state) < 9.0) {
+        return {"Good"};
+      }
+      else if (int(id(pm_2_5_aqi).state) <= 35.4) {
+        return {"Moderate"};
+      }
+      else if (int(id(pm_2_5_aqi).state) <= 55.4) {
+        return {"USG"};
+      }
+      else if (int(id(pm_2_5_aqi).state) <= 125.4) {
+        return {"UNHEALTHY"};
+      }
+      else if (int(id(pm_2_5_aqi).state) <= 225.4) {
+        return {"VERY UNHEALTHY"};
+      }
+      else if (int(id(pm_2_5_aqi).state) <= 325.4) {
+        return {"HAZARDOUS"};
+      }
+      else if (int(id(pm_2_5_aqi).state) <= 5000) {
+        return {"GET OUT OF THERE NOW!!!"};
+      }      
+      else {
+        return {"unknown"};
+      }
+      
+  - platform: template
+    name: "INDEX - VOC"
+    id: iaq_voc
+    icon: "mdi:checkbox-marked-circle-outline"
+    lambda: |-
+      if (int(id(voc).state) < 100.0) {
+        return {"Great"};
+      }
+      else if (int(id(voc).state) <= 200.0) {
+        return {"Good"};
+      }
+      else if (int(id(voc).state) <= 300.0) {
+        return {"Light"};
+      }
+      else if (int(id(voc).state) <= 400.0) {
+        return {"Moderate"};
+      }
+      else if (int(id(voc).state) <= 500.0) {
+        return {"Heavy"};
+      }
+      else {
+        return {"unknown"};
+      }
+
+  - platform: template
+    name: "INDEX - NOX"
+    id: iaq_nox
+    icon: "mdi:checkbox-marked-circle-outline"
+    lambda: |-
+      if (int(id(nox).state) < 100.0) {
+        return {"Great"};
+      }
+      else if (int(id(nox).state) <= 200.0) {
+        return {"Good"};
+      }
+      else if (int(id(nox).state) <= 300.0) {
+        return {"Light"};
+      }
+      else if (int(id(nox).state) <= 400.0) {
+        return {"Moderate"};
+      }
+      else if (int(id(nox).state) <= 500.0) {
+        return {"Heavy"};
+      }
+      else {
+        return {"unknown"};
+      }
+
+# https://esphome.io/components/light/
+light:
+
+  # https://esphome.io/components/light/esp32_rmt_led_strip
+  - platform: status_led
+    name: "${friendly_name} LED"
+    id: rgb_led
+    disabled_by_default: false
+    entity_category: config
+    pin: 
+      number: ${rgb_led_pin}
+      inverted: true
+output:
+  - platform: template
+    id: status_output
+    type: binary
+    write_action:
+    - if:
+        condition:
+          lambda: return (state);
+        then:
+          - light.turn_on:
+              id: rgb_led
+        else:
+          - light.turn_off: rgb_led
+
+number:
+  - platform: template
+    name: Humidity Offset
+    id: humidity_offset
+    restore_value: true
+    initial_value: 0.0
+    min_value: -70.0
+    max_value: 70.0
+    entity_category: "CONFIG"
+    unit_of_measurement: "%"
+    optimistic: true
+    update_interval: never
+    step: 0.1
+    mode: box
+
+  - platform: template
+    name: Temperature Offset
+    id: temperature_offset
+    restore_value: true
+    initial_value: 0.0
+    min_value: -70.0
+    max_value: 70.0
+    entity_category: "CONFIG"
+    unit_of_measurement: "°C"
+    optimistic: true
+    update_interval: never
+    step: 0.1
+    mode: box
+
+text:  
+  - platform: template
+    name: Room
+    id: device_area
+    mode: text
+    optimistic: true
+    restore_value: true # Save value every 60 seconds
+    entity_category: config
+    icon: mdi:home-map-marker
+    initial_value: ""
+time:
+  - platform: pcf8563
+    address: 0x51
+    i2c_id: bus_a
+    update_interval: never
+
+  - platform: homeassistant
+    id: homeassistant_time
+    # instead try to synchronize via network repeatedly ...
+    on_time_sync:
+      then:
+        # ... and update the RTC when the synchronization was successful
+        pcf8563.write_time: 
+
+  - platform: sntp
+    id: sntp_time
+  # Define the timezone of the device
+    timezone: "${timezone}"
+  # Change sync interval from default 5min to 6 hours (or as set in substitutions)
+    update_interval: ${sntp_update_interval}
+  # Set specific sntp servers to use
+    servers:
+      - "${sntp_server_1}"
+      - "${sntp_server_2}"
+      - "${sntp_server_3}"
+  # Publish the time the device was last restarted
+    on_time_sync:
+      then:
+        # Update last restart time, but only once.
+        - if:
+            condition:
+              lambda: 'return id(device_last_restart).state == "";'
+            then:
+              - text_sensor.template.publish:
+                  id: device_last_restart
+                  state: !lambda 'return id(sntp_time).now().strftime("%a %d %b %Y - %I:%M:%S %p");'
+                  
+interval:
+  - interval: 10s
+    then:
+      - display.page.show_next: my_display
+      - component.update: my_display
+display:
+  - platform: ssd1306_i2c
+    id: my_display
+    model: "SSD1306 128x64"
+    reset_pin: 1
+    address: 0x3C
+    rotation: 270°
+    update_interval: 1s
+    pages:
+      - id: page1    
+        lambda: |-
+          //auto now = id(sntp_time).now().strftime("%I:%M%p %m/%d/%y").c_str();       
+          //it.printf(0, 0, id(f10), TextAlign::TOP_CENTER, now);
+          it.strftime(0, 5, id(f10), TextAlign::TOP_LEFT, "%Y-%m-%d", id(homeassistant_time).now());
+          it.strftime(0, 20, id(f10), TextAlign::TOP_LEFT, "%H:%M:%S", id(homeassistant_time).now());                    
+          it.printf(0, 35, id(f10), TextAlign::TOP_LEFT, "%s", id(device_area).state.c_str());
+          it.printf(0, 50, id(f8), TextAlign::TOP_LEFT, "NOX: %s", id(iaq_nox).state.c_str());
+          it.printf(0, 65, id(f8), TextAlign::TOP_LEFT, "VOC: %s", id(iaq_voc).state.c_str());
+          it.printf(0, 80, id(f8), TextAlign::TOP_LEFT, "ABS HUM: %.1f", id(abs_hum).state);
+          it.printf(0, 95, id(f8), TextAlign::TOP_LEFT, "DEW: %.1f", id(dewPoint).state);
+          it.printf(0, 110, id(f8), TextAlign::TOP_LEFT, "AQI: %.0f", id(pm_2_5_aqi).state);          
+      - id: page2
+        lambda: |-   
+          it.print(0, 0, id(f10), TextAlign::TOP_LEFT, "TEMP: "); 
+          it.print(0, 15, id(f10), TextAlign::TOP_LEFT, "HUM: ");
+          it.print(0, 30, id(f10), TextAlign::TOP_LEFT, "PM 1: ");
+          it.print(0, 45, id(f10), TextAlign::TOP_LEFT, "PM 2.5: ");
+          it.print(0, 60, id(f10), TextAlign::TOP_LEFT, "PM 4: ");
+          it.print(0, 75, id(f10), TextAlign::TOP_LEFT, "PM 10: ");
+          it.print(0, 90, id(f10), TextAlign::TOP_LEFT, "VOC: ");
+          it.print(0, 105, id(f10), TextAlign::TOP_LEFT, "NOx: ");
+
+          it.printf(it.get_width()-2, 0, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(temperature_f).state);
+          it.printf(it.get_width()-2, 15, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(humidity).state);
+          it.printf(it.get_width()-2, 30, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(PM1_0).state);
+          //it.print(it.get_width(), 0, id(f8), TextAlign::TOP_RIGHT, "µg/m³");
+
+          it.printf(it.get_width()-2, 45, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(PM2_5).state);
+          //it.print(it.get_width(), 20, id(f8), TextAlign::TOP_RIGHT, "µg/m³");
+
+          it.printf(it.get_width()-2, 60, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(PM4_0).state);
+          //it.print(it.get_width()-2, 40, id(f8), TextAlign::TOP_RIGHT, "µg/m³");
+
+          it.printf(it.get_width()-2, 75, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(PM10_0).state);
+          //it.print(it.get_width(), 60, id(f8), TextAlign::TOP_RIGHT, "µg/m³");
+
+          it.printf(it.get_width()-2, 90, id(f10), TextAlign::TOP_RIGHT, "%.0f", id(voc).state);
+          //it.print(it.get_width(), 80, id(f8), TextAlign::TOP_RIGHT, "ppb");
+
+          it.printf(it.get_width()-2, 105, id(f10), TextAlign::TOP_RIGHT, "%.0f", id(nox).state);
+          //it.print(it.get_width(), 100, id(f8), TextAlign::TOP_RIGHT, "ppb");
+      - id: page3    
+        lambda: |-                   
+          it.printf(0, 15, id(f12), TextAlign::TOP_LEFT, "INNOVO");
+          it.printf(0, 45, id(f12), TextAlign::TOP_LEFT, "AIROQ");
+          it.printf(0, 75, id(f8), TextAlign::TOP_LEFT, id(ip_add).state.c_str());
+          it.printf(0, 85, id(f6), TextAlign::TOP_LEFT, id(mac_add).state.c_str());
+          it.printf(0, 95, id(f8), TextAlign::TOP_LEFT, id(ssid_name).state.c_str());          
+font:
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+    id: f6
+    size: 6
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+    id: f8
+    size: 8
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f10
+    size: 10
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f12
+    size: 12
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f18
+    size: 18
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f22
+    size: 22
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f32
+    size: 32
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f64
+    size: 64
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 800
+    id: f64b
+    size: 64
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 800
+    id: f55b
+    size: 55
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+
+  - file:
+      type: gfonts
+      family: Material Symbols Sharp
+      weight: 400
+    id: font_weather_icons_xsmall
+    size: 12
+    glyphs:
+      - "\U0000F159" # clear-night
+      - "\U0000F15B" # cloudy
+      - "\U0000F172" # partlycloudy
+      - "\U0000E818" # fog
+      - "\U0000F67F" # hail
+      - "\U0000EBDB" # lightning, lightning-rainy
+      - "\U0000F61F" # pouring
+      - "\U0000F61E" # rainy
+      - "\U0000F61C" # snowy
+      - "\U0000F61D" # snowy-rainy
+      - "\U0000E81A" # sunny
+      - "\U0000EFD8" # windy, windy-variant
+      - "\U0000F7F3" # exceptional
+  - file:
+      type: gfonts
+      family: Material Symbols Sharp
+      weight: 400
+    id: font_weather_icons_small
+    size: 24
+    glyphs:
+      - "\U0000F159" # clear-night
+      - "\U0000F15B" # cloudy
+      - "\U0000F172" # partlycloudy
+      - "\U0000E818" # fog
+      - "\U0000F67F" # hail
+      - "\U0000EBDB" # lightning, lightning-rainy
+      - "\U0000F61F" # pouring
+      - "\U0000F61E" # rainy
+      - "\U0000F61C" # snowy
+      - "\U0000F61D" # snowy-rainy
+      - "\U0000E81A" # sunny
+      - "\U0000EFD8" # windy, windy-variant
+      - "\U0000F7F3" # exceptional
+
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 300
+    id: font_clock
+    glyphs: "0123456789:"
+    size: 30
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 300
+    id: font_clock_big
+    glyphs: "0123456789:"
+    size: 30
+  - file: "gfonts://Roboto"
+    id: font_temp
+    size: 18
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 500
+    id: font_small
+    size: 18
+    glyphs: "!\"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz»[$]{}"
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 500
+    id: font_medium
+    size: 32
+    glyphs: "!\"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz»[$]{}"
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 300
+    id: font_xsmall
+    size: 10  
+    glyphs: "!\"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz»[$]{}"

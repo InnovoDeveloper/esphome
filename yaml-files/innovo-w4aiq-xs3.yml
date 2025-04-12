@@ -1,0 +1,907 @@
+substitutions: 
+  name: innovo-w4aiq-xs3
+  friendly_name: Innovo W4AIQ
+  short_name: W4AIQ
+  espidf_version: "5.3.0"
+  platformio_version: "6.8.1"
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 8MB
+  rgb_led_pin: GPIO21
+  sensor_interval: 1min
+ # Allows ESP device to be automatically linked to an 'Area' in Home Assistant. Typically used for areas such as 'Lounge Room', 'Kitchen' etc
+  room: ""
+  # Description as appears in ESPHome & top of webserver page
+  device_description: "Innovo Winson Environmental Sensor for Xiao S3"
+  # Project Name
+  project_name: "Innovo.AIOQ for Xiao S3"
+  # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
+  project_version: "2025.04.070"
+  # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)
+  dns_domain: ".local"
+  # Set timezone of the smart plug. Useful if the plug is in a location different to the HA server. Can be entered in unix Country/Area format (i.e. "Australia/Sydney")
+  timezone: ""
+  # Set the duration between the sntp service polling ntp.org servers for an update
+  sntp_update_interval: 6h
+  # Network time servers for your region, enter from lowest to highest priority. To use local servers update as per zones or countries at: https://www.ntppool.org/zone/@
+  sntp_server_1: "0.pool.ntp.org"
+  sntp_server_2: "1.pool.ntp.org"
+  sntp_server_3: "2.pool.ntp.org"
+  # Enables faster network connections, with last connected SSID being connected to and no full scan for SSID being undertaken
+  wifi_fast_connect: "false"
+  # Define logging level: NONE, ERROR, WARN, INFO, DEBUG (Default), VERBOSE, VERY_VERBOSE
+  log_level: "DEBUG"
+  # Enable or disable the use of IPv6 networking on the device
+  ipv6_enable: "false"
+
+esp32:
+  board: $board
+  variant: $variant
+  flash_size: $flash_size
+  framework:
+    type: esp-idf
+    version: $espidf_version
+    platform_version: $platformio_version
+
+esphome:
+  name: ${name}
+  friendly_name: $friendly_name
+  name_add_mac_suffix: true
+  comment: "${device_description}"
+  area: "${room}"
+  min_version: 2025.3.3
+  project:
+    name: "${project_name}"
+    version: "${project_version}"
+  platformio_options:
+    board_build.flash_mode: qio
+  
+  on_boot:
+  - priority: -100
+    then:
+      - light.turn_on:
+          id: rgb_led
+          flash_length: 100ms
+      - delay: 3 s
+      - light.turn_off: rgb_led
+      - display.page.show: page1
+      - delay: 30s
+      - display.page.show: page2
+  - priority: 800
+    then:
+      - pcf8563.read_time
+  - priority: 600
+    then:
+      - delay: 10s
+      - uart.write:  [0xFF, 0x01, 0x78, 0x40, 0x00, 0x00, 0x00, 0x00, 0x47]
+      - logger.log: "We set the UART interface to report every other second!"      
+preferences:
+  flash_write_interval: 1min
+  
+# Enable logging
+logger:
+  level: debug
+  initial_level: debug
+  logs:
+    sensor: WARN  # avoids logging debug sensor updates
+select:
+  - platform: logger
+    id: logger_select
+    name: Logger Level
+    disabled_by_default: false 
+mdns:
+  disabled: false                  
+network:
+  enable_ipv6: ${ipv6_enable}
+ 
+# Enable Home Assistant API
+api:
+
+ota:
+  - platform: http_request
+    id: ota_http_request
+    on_end:
+      then:
+      - light.turn_on:
+          id: rgb_led
+          flash_length: 5s  # Flash for 5 seconds
+
+http_request:
+
+update:
+  - platform: http_request
+    name: Firmware Update
+    update_interval: 60min
+    source: https://raw.githubusercontent.com/InnovoDeveloper/esphome/main/waiq-xs3/manifest.json
+
+wifi:
+  # Allow rapid re-connection to previously connect WiFi SSID, skipping scan of all SSID
+  fast_connect: "${wifi_fast_connect}"
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "${short_name} WiFi Setup"
+    ap_timeout: 60s
+  on_connect:
+    - light.turn_on:
+        id: rgb_led
+        flash_length: 1000ms  
+
+
+captive_portal:
+# Allow provisioning Wi-Fi via serial
+improv_serial:
+
+esp32_improv:
+  authorizer: none
+  on_provisioned:
+    then:
+      - logger.log: "Device provisioned via BLE"
+      - delay: 3s
+      - light.turn_on:
+          id: rgb_led
+          flash_length: 1000ms
+
+# Example configuration entry
+web_server:
+  port: 80
+# Example configuration entry
+button:
+  - platform: safe_mode
+    name: "Safe Mode"
+    internal: false
+    entity_category: config
+    
+  - platform: restart
+    name: "Restart"
+    id: restart_button
+    icon: "mdi:restart"
+    entity_category: config    
+    
+  - platform: shutdown
+    name: "Shutdown"
+    id: shutdown_button
+    icon: "mdi:power-plug-off"
+    entity_category: config
+
+switch:
+  - platform: factory_reset
+    name: "Reset To Factory Defaults"
+    icon: "mdi:restart"
+    id: factory_reset_switch
+i2c:
+  id: bus_a
+  sda: GPIO5
+  scl: GPIO6
+uart:
+  - id: uart_zphs01b
+    rx_pin: GPIO44
+    tx_pin: GPIO43
+    baud_rate: 9600
+    debug:
+      direction: RX
+      dummy_receiver: true
+      sequence:
+        - lambda: |-
+            UARTDebug::log_hex(direction, bytes,':');  //Log hex data
+            if (bytes.size() == 11 ) {
+              //only update if expected response bytes returned
+              id(CO).publish_state( bytes[2] * 256 + bytes[3] );
+              id(H2S).publish_state( bytes[4] * 256 + bytes[5] );
+              id(O2).publish_state( ( bytes[6] * 256 + bytes[7] ) * 0.01 );
+              id(CH4).publish_state( ( bytes[8] * 256 + bytes[9] ) * 0.01 );
+            }    
+psram:
+  mode: octal
+  speed: 80MHz
+debug:
+  update_interval: 5s
+sensor:
+  - platform: debug
+    free:
+      name: "Heap Free"
+      icon: "mdi:memory" # Represents RAM/memory
+    block:
+      name: "Heap Max Block"
+      icon: "mdi:memory" # Still related to memory allocation
+    loop_time:
+      name: "Loop Time"
+      icon: "mdi:timer-outline" # Represents a duration or timing
+    psram:
+      name: "Free PSRAM"
+      icon: "mdi:memory" # External RAM is still memory
+
+  #node uptime [s]
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    # type: timestamp # Note: type: timestamp is not a valid key for uptime sensor. Remove this line.
+    icon: "mdi:timer-sand" # Represents duration/time passing
+    entity_category: "diagnostic"
+
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "${short_name} WiFi db"
+    id: wifi_signal_db
+    update_interval: 60s
+    icon: "mdi:wifi" # Standard WiFi symbol
+    entity_category: "diagnostic"
+    device_class: signal_strength # This class usually provides a dynamic icon in HA, but mdi:wifi is a good static fallback
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "${short_name} WiFi Percentage"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    icon: "mdi:cloud-percent" # Clearly indicates a percentage signal strength
+    entity_category: "diagnostic"
+    # device_class: "" # Explicitly empty is fine if you don't want HA's default handling
+
+  - name: (Hydrogen Sulfide) H2S 
+    platform: template
+    id: H2S
+    unit_of_measurement: ppm
+    accuracy_decimals: 0
+    icon: "mdi:flask-outline" # Represents a chemical compound (Formaldehyde)
+    lambda: "return {};"
+
+  - name: (Caron Monoxide) CO 
+    platform: template
+    id: CO
+    unit_of_measurement: ppm
+    accuracy_decimals: 0
+    icon: "mdi:molecule-co"
+    lambda: "return {};"
+
+  - name: (Oxygen) O2 
+    platform: template
+    id: O2
+    unit_of_measurement: "%"
+    accuracy_decimals: 2
+    icon: "mdi:numeric-2-circle-outline"
+    lambda: "return {};"
+
+  - name: (Methane) CH4 
+    platform: template
+    id: CH4 # 
+    unit_of_measurement: "%"
+    accuracy_decimals: 2
+    icon: "mdi:cow" # 
+    # Alternate: mdi:molecule (generic), mdi:factory (source context)
+    lambda: "return {};"
+
+
+interval:
+#  - interval: $sensor_interval
+#    then:
+#      - uart.write:  [0xFF, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79]
+  - interval: 10s
+    then:
+      - display.page.show_next: my_display
+      - component.update: my_display
+text_sensor:
+  - platform: version
+    name: "${short_name} Version"
+   #  Creates a sensor showing when the device was last restarted
+  - platform: template
+    name: 'Last Restart'
+    id: device_last_restart
+    icon: mdi:clock
+    entity_category: diagnostic
+#    device_class: timestamp
+  - platform: wifi_info
+    ip_address:
+      id: ip_add
+      name: "${short_name} IP Address"
+      icon: "mdi:ip-network-outline" # Represents an IP address within a network context
+      entity_category: "diagnostic" # Good practice for info sensors
+    ssid:
+      id: ssid_name
+      name: "${short_name} Connected SSID"
+      icon: "mdi:wifi-check" # Shows WiFi connection status/name
+      # Alternate: mdi:access-point-network
+      entity_category: "diagnostic"
+    bssid:
+      name: "${short_name} Connected BSSID"
+      icon: "mdi:access-point" # Represents the specific hardware Access Point
+      entity_category: "diagnostic"
+    mac_address:
+      id: mac_add
+      name: "${short_name} Mac Wifi Address"
+      icon: "mdi:barcode-scan" # Represents a unique hardware identifier (like scanning a barcode)
+      # Alternate: mdi:fingerprint
+      entity_category: "diagnostic"
+
+  - platform: debug
+    device:
+      # name: "Device Info" # Name is usually automatically generated if not specified
+      id: raw_info_string
+      # Default name will likely be "Device Info" or similar based on platform
+      # If you want a specific name, uncomment and set it:
+      # name: "${friendly_name} Device Info"
+      icon: "mdi:chip" # Represents the microcontroller/hardware info
+      # Alternate: mdi:information-outline
+      entity_category: "diagnostic"
+    reset_reason:
+      name: "Reset Reason"
+      icon: "mdi:restart-alert" # Indicates a reset and suggests looking for the cause
+      # Alternate: mdi:history
+      entity_category: "diagnostic"  
+  # --- Sensor 1: Firmware Version ---
+  - platform: template
+    name: "${short_name} FW Ver."
+    id: parsed_fw_version
+    icon: mdi:numeric
+    entity_category: diagnostic
+    update_interval: 60s # Or trigger via on_value from raw_info_string
+    lambda: |-
+      std::string state = id(raw_info_string).state;
+      size_t first_pipe = state.find('|');
+      if (first_pipe == std::string::npos) {
+        return {"N/A"}; // Error: Delimiter not found
+      }
+      return {state.substr(0, first_pipe).c_str()};
+
+  # --- Sensor 2: Chip Model ---
+  - platform: template
+    name: "Chip Model"
+    id: parsed_chip_model
+    icon: mdi:chip
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      std::string state = id(raw_info_string).state;
+      size_t start_pos = state.find("Chip: ");
+      if (start_pos == std::string::npos) return {"N/A"};
+      start_pos += strlen("Chip: "); // Move past "Chip: "
+
+      // Find the end - either " Features:" or the next "|"
+      size_t end_pos_feat = state.find(" Features:", start_pos);
+      size_t end_pos_pipe = state.find('|', start_pos);
+
+      size_t end_pos = std::string::npos;
+      if (end_pos_feat != std::string::npos && end_pos_pipe != std::string::npos) {
+          end_pos = std::min(end_pos_feat, end_pos_pipe);
+      } else if (end_pos_feat != std::string::npos) {
+          end_pos = end_pos_feat;
+      } else {
+          end_pos = end_pos_pipe; // Can also be npos if it's the last segment
+      }
+
+      if (end_pos == std::string::npos) {
+          // If it's the last segment and contains "Chip:"
+          if (state.find('|', start_pos) == std::string::npos) {
+               return {state.substr(start_pos).c_str()};
+          } else {
+               return {"N/A"}; // Parsing error
+          }
+      }
+      return {state.substr(start_pos, end_pos - start_pos).c_str()};
+
+  # --- Sensor 3: Chip Features ---
+  - platform: template
+    name: "Chip Features"
+    id: parsed_chip_features
+    icon: mdi:checkbox-marked-outline
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      std::string state = id(raw_info_string).state;
+      size_t start_pos = state.find("Features:");
+      if (start_pos == std::string::npos) return {"N/A"};
+      start_pos += strlen("Features:"); // Move past "Features:"
+
+      // Find the end - either " Cores:" or the next "|"
+      size_t end_pos_cores = state.find(" Cores:", start_pos);
+      size_t end_pos_pipe = state.find('|', start_pos);
+
+      size_t end_pos = std::string::npos;
+      if (end_pos_cores != std::string::npos && end_pos_pipe != std::string::npos) {
+          end_pos = std::min(end_pos_cores, end_pos_pipe);
+      } else if (end_pos_cores != std::string::npos) {
+          end_pos = end_pos_cores;
+      } else {
+          end_pos = end_pos_pipe;
+      }
+
+      if (end_pos == std::string::npos) {
+          if (state.find('|', start_pos) == std::string::npos) {
+               return {state.substr(start_pos).c_str()};
+          } else {
+               return {"N/A"};
+          }
+      }
+      return {state.substr(start_pos, end_pos - start_pos).c_str()};
+
+  # --- Sensor 4: Chip Cores ---
+  - platform: template
+    name: "Chip Cores"
+    id: parsed_chip_cores
+    icon: mdi:cpu-64-bit # Example icon
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      std::string state = id(raw_info_string).state;
+      size_t start_pos = state.find("Cores:");
+      if (start_pos == std::string::npos) return {"N/A"};
+      start_pos += strlen("Cores:");
+
+      size_t end_pos_rev = state.find(" Revision:", start_pos);
+      size_t end_pos_pipe = state.find('|', start_pos);
+
+      size_t end_pos = std::string::npos;
+       if (end_pos_rev != std::string::npos && end_pos_pipe != std::string::npos) {
+          end_pos = std::min(end_pos_rev, end_pos_pipe);
+      } else if (end_pos_rev != std::string::npos) {
+          end_pos = end_pos_rev;
+      } else {
+          end_pos = end_pos_pipe;
+      }
+
+      if (end_pos == std::string::npos) {
+         if (state.find('|', start_pos) == std::string::npos) {
+               return {state.substr(start_pos).c_str()};
+          } else {
+               return {"N/A"};
+          }
+      }
+      return {state.substr(start_pos, end_pos - start_pos).c_str()};
+
+  # --- Sensor 5: Chip Revision ---
+  - platform: template
+    name: "Chip Revision"
+    id: parsed_chip_revision
+    icon: mdi:counter # Example icon
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      std::string state = id(raw_info_string).state;
+      size_t start_pos = state.find("Revision:");
+      if (start_pos == std::string::npos) return {"N/A"};
+      start_pos += strlen("Revision:");
+
+      // Find the end - should be the next "|"
+      size_t end_pos_pipe = state.find('|', start_pos);
+
+      if (end_pos_pipe == std::string::npos) {
+         // If it's the last segment
+         if (state.find('|', start_pos) == std::string::npos) { // Check if truly last segment
+            return {state.substr(start_pos).c_str()};
+         } else {
+             return {"N/A"}; // Shouldn't happen if Revision: found before pipe
+         }
+      }
+      return {state.substr(start_pos, end_pos_pipe - start_pos).c_str()};
+
+
+  # --- Helper lambda function to extract value after '|Key: ' ---
+  # This simplifies the remaining sensors
+  - platform: template
+    name: "Framework"
+    id: parsed_framework
+    icon: mdi:code-braces
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      auto get_value_after_key = [](const std::string& source, const std::string& key_with_pipe) -> std::string {
+          size_t key_pos = source.find(key_with_pipe);
+          if (key_pos == std::string::npos) return "N/A";
+          size_t start_val = key_pos + key_with_pipe.length();
+          size_t end_val = source.find('|', start_val);
+          if (end_val == std::string::npos) { // Last segment
+              return source.substr(start_val);
+          } else {
+              return source.substr(start_val, end_val - start_val);
+          }
+      };
+      return {get_value_after_key(id(raw_info_string).state, "|Framework: ").c_str()};
+
+  - platform: template
+    name: "Framework Ver."
+    id: parsed_framework_version
+    icon: mdi:numeric
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      auto get_value_after_key = [](const std::string& source, const std::string& key_with_pipe) -> std::string {
+          size_t key_pos = source.find(key_with_pipe);
+          if (key_pos == std::string::npos) return "N/A";
+          size_t start_val = key_pos + key_with_pipe.length();
+          size_t end_val = source.find('|', start_val);
+          if (end_val == std::string::npos) { return source.substr(start_val); }
+          else { return source.substr(start_val, end_val - start_val); }
+      };
+      // Assuming unique key "|ESP-IDF: " - adjust if needed
+      return {get_value_after_key(id(raw_info_string).state, "|ESP-IDF: ").c_str()};
+
+  - platform: template
+    name: "MAC Address"
+    id: parsed_mac_address
+    icon: mdi:network-outline
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      auto get_value_after_key = [](const std::string& source, const std::string& key_with_pipe) -> std::string {
+          size_t key_pos = source.find(key_with_pipe);
+          if (key_pos == std::string::npos) return "N/A";
+          size_t start_val = key_pos + key_with_pipe.length();
+          size_t end_val = source.find('|', start_val);
+          if (end_val == std::string::npos) { return source.substr(start_val); }
+          else { return source.substr(start_val, end_val - start_val); }
+      };
+      return {get_value_after_key(id(raw_info_string).state, "|EFuse MAC: ").c_str()};
+
+  - platform: template
+    name: "Reset Reason"
+    id: parsed_reset_reason
+    icon: mdi:alert-circle-outline
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      auto get_value_after_key = [](const std::string& source, const std::string& key_with_pipe) -> std::string {
+          size_t key_pos = source.find(key_with_pipe);
+          if (key_pos == std::string::npos) return "N/A";
+          size_t start_val = key_pos + key_with_pipe.length();
+          size_t end_val = source.find('|', start_val);
+          if (end_val == std::string::npos) { return source.substr(start_val); }
+          else { return source.substr(start_val, end_val - start_val); }
+      };
+      return {get_value_after_key(id(raw_info_string).state, "|Reset: ").c_str()};
+
+  - platform: template
+    name: "Wakeup Reason"
+    id: parsed_wakeup_reason
+    icon: mdi:power-sleep
+    update_interval: 60s
+    entity_category: diagnostic    
+    lambda: |-
+      auto get_value_after_key = [](const std::string& source, const std::string& key_with_pipe) -> std::string {
+          size_t key_pos = source.find(key_with_pipe);
+          if (key_pos == std::string::npos) return "N/A";
+          size_t start_val = key_pos + key_with_pipe.length();
+          size_t end_val = source.find('|', start_val);
+          if (end_val == std::string::npos) { // This is expected to be the last segment
+              return source.substr(start_val);
+          } else {
+              // This case might indicate an unexpected format
+              return source.substr(start_val, end_val - start_val);
+          }
+      };
+      return {get_value_after_key(id(raw_info_string).state, "|Wakeup: ").c_str()};
+
+  ######    
+
+# https://esphome.io/components/light/
+light:
+
+  # https://esphome.io/components/light/esp32_rmt_led_strip
+  - platform: status_led
+    name: "${short_name} LED"
+    id: rgb_led
+    disabled_by_default: false
+    entity_category: config
+    pin: 
+      number: ${rgb_led_pin}
+      inverted: true
+output:
+  - platform: template
+    id: status_output
+    type: binary
+    write_action:
+    - if:
+        condition:
+          lambda: return (state);
+        then:
+          - light.turn_on:
+              id: rgb_led
+        else:
+          - light.turn_off: rgb_led
+
+
+text:  
+  - platform: template
+    name: Room
+    id: device_area
+    mode: text
+    optimistic: true
+    restore_value: true # Save value every 60 seconds
+    entity_category: config
+    icon: mdi:home-map-marker
+    initial_value: ""
+time:
+  - platform: pcf8563
+    address: 0x51
+    i2c_id: bus_a
+    update_interval: never
+
+  - platform: homeassistant
+    id: homeassistant_time
+    # instead try to synchronize via network repeatedly ...
+    on_time_sync:
+      then:
+        # ... and update the RTC when the synchronization was successful
+        pcf8563.write_time: 
+
+  - platform: sntp
+    id: sntp_time
+  # Define the timezone of the device
+    timezone: "${timezone}"
+  # Change sync interval from default 5min to 6 hours (or as set in substitutions)
+    update_interval: ${sntp_update_interval}
+  # Set specific sntp servers to use
+    servers:
+      - "${sntp_server_1}"
+      - "${sntp_server_2}"
+      - "${sntp_server_3}"
+  # Publish the time the device was last restarted
+    on_time_sync:
+      then:
+        # Update last restart time, but only once.
+        - if:
+            condition:
+              lambda: 'return id(device_last_restart).state == "";'
+            then:
+              - text_sensor.template.publish:
+                  id: device_last_restart
+                  state: !lambda 'return id(sntp_time).now().strftime("%a %d %b %Y - %I:%M:%S %p");'
+
+display:
+  - platform: ssd1306_i2c
+    id: my_display
+    model: "SSD1306 128x64"
+    reset_pin: 1
+    address: 0x3C
+    rotation: 270°
+    update_interval: 1s
+    pages:
+      - id: page1    
+        lambda: |-
+          //auto now = id(sntp_time).now().strftime("%I:%M%p %m/%d/%y").c_str();       
+          //it.printf(0, 0, id(f10), TextAlign::TOP_CENTER, now);
+          it.strftime(0, 5, id(f10), TextAlign::TOP_LEFT, "%Y-%m-%d", id(homeassistant_time).now());
+          it.strftime(0, 20, id(f10), TextAlign::TOP_LEFT, "%H:%M:%S", id(homeassistant_time).now());                    
+          it.printf(0, 35, id(f10), TextAlign::TOP_LEFT, "%s", id(device_area).state.c_str());
+
+      - id: page2
+        lambda: |-   
+          //it.print(0, 0, id(f10), TextAlign::TOP_LEFT, "CO: "); 
+          it.print(0, 15, id(f10), TextAlign::TOP_LEFT, "CO: ");
+          it.print(0, 30, id(f10), TextAlign::TOP_LEFT, "H2S: ");
+          it.print(0, 45, id(f10), TextAlign::TOP_LEFT, "O2: ");
+          it.print(0, 75, id(f10), TextAlign::TOP_LEFT, "CH4: ");
+          //it.print(0, 60, id(f10), TextAlign::TOP_LEFT, "ch2o: ");          
+          //it.print(0, 90, id(f10), TextAlign::TOP_LEFT, "VOC: ");
+          //it.print(0, 105, id(f10), TextAlign::TOP_LEFT, "NOx: ");
+
+          //it.printf(it.get_width()-2, 0, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(temperature_f).state);
+          //it.printf(it.get_width()-2, 15, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(humidity).state);
+
+          it.printf(it.get_width()-2, 30, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(CO).state);
+          //it.print(it.get_width(), 0, id(f8), TextAlign::TOP_RIGHT, "PPM");
+
+          it.printf(it.get_width()-2, 45, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(H2S).state);
+          //it.print(it.get_width(), 20, id(f8), TextAlign::TOP_RIGHT, "PPM");
+
+          it.printf(it.get_width()-2, 75, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(O2).state);
+          //it.print(it.get_width(), 60, id(f8), TextAlign::TOP_RIGHT, "%");
+
+          it.printf(it.get_width()-2, 60, id(f10), TextAlign::TOP_RIGHT, "%.1f", id(CH4).state);
+          //it.print(it.get_width()-2, 40, id(f8), TextAlign::TOP_RIGHT, "%³");
+
+          //it.printf(it.get_width()-2, 90, id(f10), TextAlign::TOP_RIGHT, "%.0f", id(voc).state);
+          //it.print(it.get_width(), 80, id(f8), TextAlign::TOP_RIGHT, "ppb");
+
+          //it.printf(it.get_width()-2, 105, id(f10), TextAlign::TOP_RIGHT, "%.0f", id(nox).state);
+          //it.print(it.get_width(), 100, id(f8), TextAlign::TOP_RIGHT, "ppb");
+      - id: page3    
+        lambda: |-                   
+          it.printf(0, 15, id(f12), TextAlign::TOP_LEFT, "INNOVO");
+          it.printf(0, 45, id(f12), TextAlign::TOP_LEFT, "GAS");
+          it.printf(0, 75, id(f8), TextAlign::TOP_LEFT, id(ip_add).state.c_str());
+          it.printf(0, 85, id(f6), TextAlign::TOP_LEFT, id(mac_add).state.c_str());
+          it.printf(0, 95, id(f8), TextAlign::TOP_LEFT, id(ssid_name).state.c_str());          
+font:
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+    id: f6
+    size: 6
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+    id: f8
+    size: 8
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f10
+    size: 10
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f12
+    size: 12
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f18
+    size: 18
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f22
+    size: 22
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f32
+    size: 32
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 500
+    id: f64
+    size: 64
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 800
+    id: f64b
+    size: 64
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+
+  - file:
+      type: gfonts
+      family: Noto Sans Display
+      weight: 800
+    id: f55b
+    size: 55
+    glyphs: ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°', '0',
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+        'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z','å', 'ä', 'ö', '/', 'µ', '³', '’','[','$',']','{','}']
+
+  - file:
+      type: gfonts
+      family: Material Symbols Sharp
+      weight: 400
+    id: font_weather_icons_xsmall
+    size: 12
+    glyphs:
+      - "\U0000F159" # clear-night
+      - "\U0000F15B" # cloudy
+      - "\U0000F172" # partlycloudy
+      - "\U0000E818" # fog
+      - "\U0000F67F" # hail
+      - "\U0000EBDB" # lightning, lightning-rainy
+      - "\U0000F61F" # pouring
+      - "\U0000F61E" # rainy
+      - "\U0000F61C" # snowy
+      - "\U0000F61D" # snowy-rainy
+      - "\U0000E81A" # sunny
+      - "\U0000EFD8" # windy, windy-variant
+      - "\U0000F7F3" # exceptional
+  - file:
+      type: gfonts
+      family: Material Symbols Sharp
+      weight: 400
+    id: font_weather_icons_small
+    size: 24
+    glyphs:
+      - "\U0000F159" # clear-night
+      - "\U0000F15B" # cloudy
+      - "\U0000F172" # partlycloudy
+      - "\U0000E818" # fog
+      - "\U0000F67F" # hail
+      - "\U0000EBDB" # lightning, lightning-rainy
+      - "\U0000F61F" # pouring
+      - "\U0000F61E" # rainy
+      - "\U0000F61C" # snowy
+      - "\U0000F61D" # snowy-rainy
+      - "\U0000E81A" # sunny
+      - "\U0000EFD8" # windy, windy-variant
+      - "\U0000F7F3" # exceptional
+
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 300
+    id: font_clock
+    glyphs: "0123456789:"
+    size: 30
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 300
+    id: font_clock_big
+    glyphs: "0123456789:"
+    size: 30
+  - file: "gfonts://Roboto"
+    id: font_temp
+    size: 18
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 500
+    id: font_small
+    size: 18
+    glyphs: "!\"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz»[$]{}"
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 500
+    id: font_medium
+    size: 32
+    glyphs: "!\"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz»[$]{}"
+  - file:
+      type: gfonts
+      family: Open Sans
+      weight: 300
+    id: font_xsmall
+    size: 10  
+    glyphs: "!\"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz»[$]{}"

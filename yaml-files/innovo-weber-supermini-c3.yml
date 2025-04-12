@@ -1,0 +1,457 @@
+substitutions: 
+  devicename: innovo-webermini-probe
+  friendly_name: Innovo Weber Probe
+  rgb_led_pin: GPIO8
+ # Allows ESP device to be automatically linked to an 'Area' in Home Assistant. Typically used for areas such as 'Lounge Room', 'Kitchen' etc
+  room: ""
+  # Description as appears in ESPHome & top of webserver page
+  device_description: "Innovo Weber Mini Probe"
+  # Project Name
+  project_name: "Innovo. Weber Mini Probe Super Mini C3"
+  # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
+  project_version: "2025.03.13"
+  # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)
+  dns_domain: ".local"
+  # Set timezone of the smart plug. Useful if the plug is in a location different to the HA server. Can be entered in unix Country/Area format (i.e. "Australia/Sydney")
+  timezone: ""
+  # Set the duration between the sntp service polling ntp.org servers for an update
+  sntp_update_interval: 6h
+  # Network time servers for your region, enter from lowest to highest priority. To use local servers update as per zones or countries at: https://www.ntppool.org/zone/@
+  sntp_server_1: "0.pool.ntp.org"
+  sntp_server_2: "1.pool.ntp.org"
+  sntp_server_3: "2.pool.ntp.org"
+  # Enables faster network connections, with last connected SSID being connected to and no full scan for SSID being undertaken
+  wifi_fast_connect: "false"
+  # Define logging level: NONE, ERROR, WARN, INFO, DEBUG (Default), VERBOSE, VERY_VERBOSE
+  log_level: "DEBUG"
+  # Enable or disable the use of IPv6 networking on the device
+  ipv6_enable: "false"
+
+esphome:
+  name: ${devicename}
+  friendly_name: $friendly_name
+  name_add_mac_suffix: true
+  comment: "${device_description}"
+  area: "${room}"
+  min_version: 2025.2.0
+  project:
+    name: "${project_name}"
+    version: "${project_version}"
+  platformio_options:
+    board_build.flash_mode: dio
+
+  on_boot:
+    priority: -100
+    then:
+      - light.turn_on:
+          id: rgb_led
+          brightness: 50%
+          red: 100%
+          green: 0%
+          blue: 0%
+      - delay: 1 s
+      - light.turn_on:
+          id: rgb_led
+          brightness: 50%
+          red: 100%
+          green: 74.9%
+          blue: 0%
+      - delay: 1 s
+      - light.turn_on:
+          id: rgb_led
+          brightness: 50%
+          red: 100%
+          green: 0%
+          blue: 0%
+      - delay: .25 s
+      - light.turn_on:
+          id: rgb_led
+          brightness: 50%
+          red: 0%
+          green: 100%
+          blue: 0%
+      - delay: 1 s
+      - light.turn_off: rgb_led
+
+esp32:
+  board: esp32-c3-devkitm-1
+  flash_size: 4MB
+  variant: ESP32C3
+  framework:
+    type: esp-idf
+    version: recommended
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Enable Home Assistant API
+# Enable Web Server
+web_server:
+  port: 80
+
+# Enable API
+api:
+  on_client_connected:
+     - esp32_ble_tracker.start_scan:
+        continuous: true
+  on_client_disconnected:
+    if:
+      condition:
+        not:
+          api.connected:
+      then:
+        - esp32_ble_tracker.stop_scan: 
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: true
+
+bluetooth_proxy:
+  active: true  
+
+igrill_ble_listener:
+
+ota:
+  - platform: http_request
+    id: ota_http_request
+
+http_request:
+
+update:
+  - platform: http_request
+    name: Firmware Update
+    update_interval: 1440min
+    source: https://raw.githubusercontent.com/InnovoDeveloper/esphome/refs/heads/main/weber/ota/manifest.json
+
+wifi:
+  # Allow rapid re-connection to previously connect WiFi SSID, skipping scan of all SSID
+  fast_connect: "${wifi_fast_connect}"  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "${friendly_name} WiFi Setup"
+    ap_timeout: 30s
+
+  on_connect:
+    - delay: 5s
+    - esp32_ble_tracker.start_scan:
+        continuous: true
+    - light.turn_on:
+        id: rgb_led
+        red: 0%
+        green: 50%
+        blue: 0%
+        brightness: 25%
+        effect: none         
+  on_disconnect:
+    - esp32_ble_tracker.stop_scan:
+    - light.turn_on:
+        id: rgb_led
+        red: 100%
+        green: 0%
+        blue: 0%
+        brightness: 25%
+        effect: Fast Pulse     
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+
+captive_portal:
+  # Example configuration entry
+external_components:
+  - source: github://bendikwa/esphome-igrill@v1.2
+
+light:
+  - platform: esp32_rmt_led_strip
+    name: "${friendly_name} RGB LED"
+    id: rgb_led
+    disabled_by_default: false
+    entity_category: config
+    rgb_order: GRB
+    pin: ${rgb_led_pin}
+    num_leds: 1
+    chipset: WS2812
+
+    effects:
+      - pulse:
+          name: Slow Pulse
+          transition_length: 250ms
+          update_interval: 250ms
+          min_brightness: 50%
+          max_brightness: 25%
+      - pulse:
+          name: Fast Pulse
+          transition_length: 100ms
+          update_interval: 100ms
+          min_brightness: 50%
+          max_brightness: 50%
+
+output:
+  - platform: template
+    id: status_output
+    type: binary
+    write_action:
+    - if:
+        condition:
+          lambda: return (state);
+        then:
+          - light.turn_on:
+              id: rgb_led
+              brightness: 70%
+              red: 100%
+              green: 0%
+              blue: 0%
+        else:
+          - light.turn_off: rgb_led
+ 
+
+esp32_improv:
+  authorizer: none
+  on_provisioned:
+    then:
+      - logger.log: "Device provisioned via BLE"
+      - delay: 5s
+      - light.turn_on:
+          id: rgb_led
+          red: 0%
+          green: 100%
+          blue: 0%
+          brightness: 25%
+          effect: none
+
+
+button: 
+  - platform: restart
+    name: "Restart"
+    id: restart_button
+    icon: "mdi:restart"
+    entity_category: config    
+    
+  - platform: shutdown
+    name: "Shutdown"
+    id: shutdown_button
+    icon: "mdi:shutdown"
+    entity_category: config
+switch:
+  - platform: factory_reset
+    name: "Reset To Factory Defaults"
+    icon: "mdi:restart"
+    id: factory_reset_switch
+
+interval:
+  - interval: 60s # Adjust interval as needed
+    then:
+      - if:
+          condition:
+            binary_sensor.is_off: mini_connection_bin_1 # Check if the sensor is already off
+          then:
+            - lambda: id(mini_connection_bin_1).publish_state(false); id(igrill_probe_1_temp).publish_state(0);
+            - logger.log: "BLE device hasn't reported for > 60 seconds. Setting to off."
+      - if:
+          condition:
+            binary_sensor.is_off: mini_connection_bin_2 # Check if the sensor is already off
+          then:
+            - lambda: id(mini_connection_bin_2).publish_state(false); id(igrill_probe_2_temp).publish_state(0);
+            - logger.log: "BLE device hasn't reported for > 60 seconds. Setting to off."            
+binary_sensor:
+  - platform: template
+    name: "iGrill Probe 1 connection status"
+    id: mini_connection_bin_1
+    device_class: connectivity
+    entity_category: diagnostic
+
+  - platform: template
+    name: "iGrill Probe 2 connection status"
+    id: mini_connection_bin_2
+    device_class: connectivity
+    entity_category: diagnostic  
+
+ble_client:
+  - mac_address: 70:91:8F:9A:6D:40
+    id: igrill_mini_1
+    on_connect:
+      then:
+        - binary_sensor.template.publish:
+            id: mini_connection_bin_1
+            state: ON
+        - light.turn_on:
+            id: rgb_led
+            red: 0%
+            green: 100%
+            blue: 100%
+            brightness: 50%
+            effect: Fast Pulse
+        - delay: 15s
+        - light.turn_on:
+            id: rgb_led
+            red: 0%
+            green: 100%
+            blue: 0%
+            brightness: 25%
+            effect: none        
+    on_disconnect:
+      then:
+        - binary_sensor.template.publish:
+            id: mini_connection_bin_1
+            state: OFF
+        - light.turn_on:
+            id: rgb_led
+            red: 0%
+            green: 100%
+            blue: 100%
+            brightness: 100%
+            effect: Fast Pulse
+        - delay: 15s
+        - light.turn_on:
+            id: rgb_led
+            red: 0%
+            green: 100%
+            blue: 0%
+            brightness: 25%
+            effect: none             
+  - mac_address: 70:91:8F:9A:5D:89
+    id: igrill_mini_2
+    on_connect:
+      then:
+        - binary_sensor.template.publish:
+            id: mini_connection_bin_2
+            state: ON
+        - light.turn_on:
+            id: rgb_led
+            red: 50%
+            green: 0%
+            blue: 50%
+            brightness: 50%
+            effect: none 
+        - delay: 15s
+        - light.turn_on:
+            id: rgb_led
+            red: 0%
+            green: 100%
+            blue: 0%
+            brightness: 25%
+            effect: none                          
+    on_disconnect:
+      then:
+        - binary_sensor.template.publish:
+            id: mini_connection_bin_2
+            state: OFF 
+        - light.turn_on:
+            id: rgb_led
+            red: 100%
+            green: 0%
+            blue: 100%
+            brightness: 100%
+            effect: Fast Pulse
+        - delay: 15s
+        - light.turn_on:
+            id: rgb_led
+            red: 0%
+            green: 100%
+            blue: 0%
+            brightness: 25%
+            effect: none                                    
+sensor:
+  - platform: igrill
+    ble_client_id: igrill_mini_1
+    update_interval: 10s # default
+    send_value_when_unplugged: true # default
+    unplugged_probe_value: 0 # default
+    battery_level:
+      name: "iGrill Probe 1 battery"
+    temperature_probe1:
+      id: igrill_probe_1_temp
+      name: "iGrill Probe 1 temp probe"
+      unit_of_measurement: "°F"
+      filters:
+      - lambda: |-
+          if (isnan(x)) {
+            return 0.0;
+          } else {
+            return x;
+          }
+  - platform: igrill
+    ble_client_id: igrill_mini_2
+    update_interval: 10s # default
+    send_value_when_unplugged: true # default
+    unplugged_probe_value: 0 # default
+    battery_level:
+      name: "iGrill Probe 2 battery"
+    temperature_probe1:
+      id: igrill_probe_2_temp      
+      name: "iGrill Probe 2 temp probe"
+      unit_of_measurement: "°F"  
+      filters:
+      - lambda: |-
+          if (isnan(x)) {
+            return 0.0;
+          } else {
+            return x;
+          }
+
+  #node uptime [s]
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    type:
+      timestamp
+    entity_category: "diagnostic"
+      
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "${friendly_name} WiFi db"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+    device_class: signal_strength
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "${friendly_name} WiFi Percentage"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    entity_category: "diagnostic"
+    device_class: ""  
+
+text_sensor:
+  - platform: version
+    name: "${friendly_name} Version"
+   #  Creates a sensor showing when the device was last restarted
+  - platform: template
+    name: 'Last Restart'
+    id: device_last_restart
+    icon: mdi:clock
+    entity_category: diagnostic
+#    device_class: timestamp
+  - platform: wifi_info
+    ip_address:
+      name: "${friendly_name} IP Address"
+    ssid:
+      name: "${friendly_name} Connected SSID"
+    bssid:
+      name: "${friendly_name} Connected BSSID"
+    mac_address:
+      name: "${friendly_name} Mac Wifi Address"    
+
+
+time:
+  - platform: sntp
+    id: sntp_time
+  # Define the timezone of the device
+    timezone: "${timezone}"
+  # Change sync interval from default 5min to 6 hours (or as set in substitutions)
+    update_interval: ${sntp_update_interval}
+  # Set specific sntp servers to use
+    servers:
+      - "${sntp_server_1}"
+      - "${sntp_server_2}"
+      - "${sntp_server_3}"
+  # Publish the time the device was last restarted
+    on_time_sync:
+      then:
+        # Update last restart time, but only once.
+        - if:
+            condition:
+              lambda: 'return id(device_last_restart).state == "";'
+            then:
+              - text_sensor.template.publish:
+                  id: device_last_restart
+                  state: !lambda 'return id(sntp_time).now().strftime("%a %d %b %Y - %I:%M:%S %p");'

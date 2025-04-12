@@ -1,0 +1,290 @@
+substitutions: 
+  devicename: innovo-btp-xc6
+  friendly_name: Innovo XC6 BTP
+  rgb_led_pin: GPIO15
+ # Allows ESP device to be automatically linked to an 'Area' in Home Assistant. Typically used for areas such as 'Lounge Room', 'Kitchen' etc
+  room: ""
+  # Description as appears in ESPHome & top of webserver page
+  device_description: "Innovo Blue Tooth Proxy & Repeater"
+  # Project Name
+  project_name: "Innovo. Blue Tooth Proxy & Repeater for Xiao C6"
+  # Projection version denotes the release version of the yaml file, allowing checking of deployed vs latest version
+  project_version: "v1.0.0"
+  # Define a domain for this device to use. i.e. iot.home.lan (so device will appear as innovo_bt_els3.local in DNS/DHCP logs)
+  dns_domain: ".local"
+  # Set timezone of the smart plug. Useful if the plug is in a location different to the HA server. Can be entered in unix Country/Area format (i.e. "Australia/Sydney")
+  timezone: ""
+  # Set the duration between the sntp service polling ntp.org servers for an update
+  sntp_update_interval: 6h
+  # Network time servers for your region, enter from lowest to highest priority. To use local servers update as per zones or countries at: https://www.ntppool.org/zone/@
+  sntp_server_1: "0.pool.ntp.org"
+  sntp_server_2: "1.pool.ntp.org"
+  sntp_server_3: "2.pool.ntp.org"
+  # Enables faster network connections, with last connected SSID being connected to and no full scan for SSID being undertaken
+  wifi_fast_connect: "false"
+  # Define logging level: NONE, ERROR, WARN, INFO, DEBUG (Default), VERBOSE, VERY_VERBOSE
+  log_level: "DEBUG"
+  # Enable or disable the use of IPv6 networking on the device
+  ipv6_enable: "false"
+
+esphome:
+  name: ${devicename}
+  friendly_name: $friendly_name
+  name_add_mac_suffix: true
+  comment: "${device_description}"
+  area: "${room}"
+  min_version: 2024.12.0
+  project:
+    name: "${project_name}"
+    version: "${project_version}"
+  platformio_options:
+    platform: https://github.com/lucaskatayama/platform-espressif32.git#feat/seeed_xiao_esp32c6.json
+
+esp32:
+  board: seeed_xiao_esp32c6
+  variant: ESP32C6
+  framework:
+    type: esp-idf
+    version: 5.3.0
+    platform_version: 6.9.0
+    sdkconfig_options:
+      CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
+
+  
+# Enable logging
+logger:
+  baud_rate: 115200
+  level: DEBUG
+  hardware_uart: USB_SERIAL_JTAG
+
+mdns:
+  disabled: false                  
+network:
+  enable_ipv6: ${ipv6_enable}
+ 
+# Enable Home Assistant API
+api:
+  password: ""
+
+  on_client_connected:
+     - esp32_ble_tracker.start_scan:
+        continuous: true
+  on_client_disconnected:
+    if:
+      condition:
+        not:
+          api.connected:
+      then:
+        - esp32_ble_tracker.stop_scan:
+
+ota:
+  - platform: esphome
+    password: "12345678"
+
+wifi:
+  # Allow rapid re-connection to previously connect WiFi SSID, skipping scan of all SSID
+  fast_connect: "${wifi_fast_connect}"  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "${friendly_name} WiFi Setup"
+    ap_timeout: 15s
+  on_connect:
+    - esp32_ble_tracker.start_scan:
+        continuous: true
+    - light.turn_on:
+        id: rgb_led     
+  on_disconnect:
+    - esp32_ble_tracker.stop_scan:
+    - light.turn_on:
+        id: rgb_led
+
+captive_portal:
+# Allow provisioning Wi-Fi via serial
+improv_serial:
+
+esp32_improv:
+  authorizer: none
+  on_provisioned:
+    then:
+      - logger.log: "Device provisioned via BLE"
+      - delay: 3s
+      - light.turn_on:
+          id: rgb_led      
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: true
+
+bluetooth_proxy:
+  active: true  
+# Example configuration entry
+web_server:
+  port: 80
+# Example configuration entry
+button:
+  - platform: safe_mode
+    name: "Safe Mode"
+    internal: false
+    entity_category: config
+    
+  - platform: restart
+    name: "Restart"
+    id: restart_button
+    icon: "mdi:restart"
+    entity_category: config    
+    
+  - platform: shutdown
+    name: "Shutdown"
+    id: shutdown_button
+    icon: "mdi:shutdown"
+    entity_category: config
+
+sensor:
+  #node uptime [s]
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    type:
+      timestamp
+    entity_category: "diagnostic"
+    
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "${friendly_name} WiFi db"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+    device_class: signal_strength
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "${friendly_name} WiFi Percentage"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    entity_category: "diagnostic"
+    device_class: ""
+    
+text_sensor:
+  - platform: version
+    name: "${friendly_name} Version"
+   #  Creates a sensor showing when the device was last restarted
+  - platform: template
+    name: 'Last Restart'
+    id: device_last_restart
+    icon: mdi:clock
+    entity_category: diagnostic
+#    device_class: timestamp
+  - platform: wifi_info
+    ip_address:
+      name: "${friendly_name} IP Address"
+    ssid:
+      name: "${friendly_name} Connected SSID"
+    bssid:
+      name: "${friendly_name} Connected BSSID"
+    mac_address:
+      name: "${friendly_name} Mac Wifi Address"
+
+# https://esphome.io/components/external_components.html
+external_components:
+
+  # TODO: Add RGB LED for status_indicator
+  # https://github.com/esphome/esphome/pull/5814
+  - source: github://pr#5814
+    components: [ status_indicator, wifi ]
+
+#This is to make sure adc compiles or else it will throw an error
+  - source:
+      # https://github.com/lboue/esphome/blob/adc_oneshot/esphome/components/adc
+      type: git
+      url: https://github.com/lboue/esphome
+      ref: adc_oneshot
+    components: [ adc ]
+    refresh: 0s
+switch:
+  - platform: factory_reset
+    name: "Reset To Factory Defaults"
+    icon: "mdi:restart"
+    id: factory_reset_switch
+
+# https://esphome.io/components/light/
+light:
+
+  # https://esphome.io/components/light/esp32_rmt_led_strip
+  - platform: status_led
+    name: "${friendly_name} LED"
+    id: rgb_led
+    disabled_by_default: false
+    entity_category: config
+    pin: 
+      number: ${rgb_led_pin}
+      inverted: true
+output:
+  - platform: template
+    id: status_output
+    type: binary
+    write_action:
+    - if:
+        condition:
+          lambda: return (state);
+        then:
+          - light.turn_on:
+              id: rgb_led
+        else:
+          - light.turn_off: rgb_led
+
+#this enalbes the onboard antenna so no external antenna is needed
+  - platform: gpio
+    id: wifi_switch_enable
+    pin: GPIO3
+      
+           
+# https://github.com/esphome/esphome/pull/5814
+status_indicator:
+  on_turn_off:
+    then:
+    - light.turn_on:
+        id: rgb_led
+  on_app_error:
+    then:
+    - light.turn_on:
+        id: rgb_led
+  on_app_warning:
+    then:
+    - light.turn_on:
+        id: rgb_led     
+  on_wifi_ap_enabled:
+    then:
+    - light.turn_on:
+        id: rgb_led   
+  on_network_disconnected:
+    then:
+    - light.turn_on:
+        id: rgb_led  
+  on_api_disconnected:
+    then:
+    - light.turn_on:
+        id: rgb_led
+        
+time:
+  - platform: sntp
+    id: sntp_time
+  # Define the timezone of the device
+    timezone: "${timezone}"
+  # Change sync interval from default 5min to 6 hours (or as set in substitutions)
+    update_interval: ${sntp_update_interval}
+  # Set specific sntp servers to use
+    servers:
+      - "${sntp_server_1}"
+      - "${sntp_server_2}"
+      - "${sntp_server_3}"
+  # Publish the time the device was last restarted
+    on_time_sync:
+      then:
+        # Update last restart time, but only once.
+        - if:
+            condition:
+              lambda: 'return id(device_last_restart).state == "";'
+            then:
+              - text_sensor.template.publish:
+                  id: device_last_restart
+                  state: !lambda 'return id(sntp_time).now().strftime("%a %d %b %Y - %I:%M:%S %p");'
