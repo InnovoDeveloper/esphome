@@ -1,6 +1,6 @@
 {
   "name": "Innovo Blue Tooth Proxy",
-  "version": "2025.03.292",
+  "version": "2025.05.261",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
@@ -8,7 +8,7 @@
       "chipFamily": "m5stack-atom",
       "ota": {
         "md5": "ce46fdfb22d27ec0d084f77d29018022",
-        "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/btp_al/ota/innovo-aioq-xs3.ota.bin",
+        "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/btp_al/ota/innovo-btp-al.ota.bin",
         "summary": "Update Innovo AIO Air Quality"
       }
     }
