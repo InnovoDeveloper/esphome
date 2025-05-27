@@ -1,0 +1,16 @@
+{
+  "name": "Innovo Blue Tooth Proxy",
+  "version": "2025.05.265",
+  "home_assistant_domain": "esphome",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "m5stack-atom",
+      "ota": {
+        "md5": "fbc96277efd9cf7af8eba0753e59a9f3",
+        "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/innovo-btp-al/ota/innovo-btp-al.ota.bin",
+        "summary": "Update Innovo BTP"
+      }
+    }
+  ]
+}
