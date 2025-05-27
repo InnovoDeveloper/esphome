@@ -7,7 +7,7 @@
     {
       "chipFamily": "m5stack-atom",
       "ota": {
-        "md5": "fbc96277efd9cf7af8eba0753e59a9f3",
+        "md5": "410fdf2b66438662877f6d525666b37a",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/innovo-btp-al/ota/innovo-btp-al.ota.bin",
         "summary": "Update Innovo BTP"
       }
