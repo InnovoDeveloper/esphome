@@ -8,11 +8,13 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
 )
 
+# Namespace and component registration
 sonic_i2c_ns = cg.esphome_ns.namespace("sonic_i2c")
 SonicI2CComponent = sonic_i2c_ns.class_(
     "SonicI2CComponent", cg.PollingComponent, i2c.I2CDevice, sensor.Sensor
 )
 
+# Configuration schema
 CONFIG_SCHEMA = sensor.sensor_schema(
     unit_of_measurement=UNIT_MILLIMETER,
     device_class=DEVICE_CLASS_DISTANCE,
@@ -24,6 +26,7 @@ CONFIG_SCHEMA = sensor.sensor_schema(
     }
 ).extend(cv.COMPONENT_SCHEMA).extend(i2c.i2c_device_schema(0x57))
 
+# Code generation
 def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     yield cg.register_component(var, config)
