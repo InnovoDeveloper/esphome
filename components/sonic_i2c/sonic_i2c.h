@@ -11,6 +11,7 @@ class SonicI2CComponent : public PollingComponent, public i2c::I2CDevice, public
  public:
   void update() override;
   void dump_config() override;
+  virtual ~SonicI2CComponent() {}
 
   void set_address(uint8_t address) { this->address_ = address; }
 
