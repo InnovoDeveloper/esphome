@@ -1,24 +1,21 @@
 #pragma once
 
-#include "esphome/core/component.h"
-#include "esphome/components/sensor/sensor.h"
+#include <esphome.h>
+#include "esphome/core/gpio.h"
 #include "esphome/components/i2c/i2c.h"
+#include "esphome/components/sensor/sensor.h"
 
 namespace esphome {
-namespace sonic_i2c {
+namespace sonic_i2c_sensor {
 
-class SonicI2CComponent : public PollingComponent, public i2c::I2CDevice, public sensor::Sensor {
+class SonicI2C : public i2c::I2CDevice, public sensor::Sensor, public PollingComponent {
  public:
-  void set_update_interval(uint32_t update_interval) override;
-
-  void update() override;
+  void setup() override;
   void dump_config() override;
+  void update() override;
+  float getDistance();
 
- protected:
-  uint8_t state_ = 0;                    // 0=idle, 1=requested, 2=waiting
-  uint32_t last_request_ms_ = 0;         // Time of last request
-  static const uint32_t READ_TIMEOUT_MS = 100;
 };
 
-}  // namespace sonic_i2c
+}  // namespace sonic_i2c_sensor
 }  // namespace esphome
