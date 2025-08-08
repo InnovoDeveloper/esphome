@@ -2,78 +2,48 @@
 #include "esphome/core/log.h"
 
 namespace esphome {
-namespace sonic_i2c {
+static const char *TAG = "sonic_i2c";
+namespace sonic_i2c_sensor {
 
-static const char *const TAG = "sonic_i2c";
-
-void SonicI2CComponent::set_update_interval(uint32_t update_interval) {
-  PollingComponent::set_update_interval(update_interval);
+void SonicI2C::dump_config() {
+  LOG_SENSOR(TAG, "Ultrasonic Sensor", this);
+  ESP_LOGD(TAG, "Ultrasonic Sensor I2C Address :  %x", this->address_);
+  LOG_UPDATE_INTERVAL(this);
 }
 
-void SonicI2CComponent::update() {
-  uint32_t now = millis();
+float SonicI2C::getDistance() {
+  uint32_t data;
+  uint8_t val = 0x01;
+  this->write(&val, 1);
 
-  switch (state_) {
-    // STATE 0: Idle — trigger measurement
-    case 0: {
-      uint8_t cmd = 0x00;
-      auto err = this->write(&cmd, 1);
-      if (err == i2c::ERROR_OK) {
-        state_ = 1;
-        last_request_ms_ = now;
-        ESP_LOGV(TAG, "Triggered measurement");
-      } else {
-        ESP_LOGW(TAG, "Failed to trigger measurement: %d", (int)err);
-        this->status_set_warning();
-      }
-      break;
-    }
+  delay(120);
 
-    // STATE 1: Move to waiting
-    case 1:
-      state_ = 2;
-      break;
+  uint8_t data_buffer[] = {0, 0, 0};
+  this->read(data_buffer, 3);
 
-    // STATE 2: Wait and read result
-    case 2:
-      if (now - last_request_ms_ > READ_TIMEOUT_MS) {
-        uint8_t reg = 0x03;
-        auto err = this->write(&reg, 1);
-        if (err != i2c::ERROR_OK) {
-          ESP_LOGW(TAG, "Failed to select register 0x03: %d", (int)err);
-          state_ = 0;
-          return;
-        }
-
-        delay(1);  // Small delay if sensor needs it
-
-        uint8_t data[2];
-        err = this->read(data, 2);
-        if (err == i2c::ERROR_OK) {
-          uint16_t dist = (data[0] << 8) | data[1];
-          if (dist > 0 && dist < 5000) {
-            this->publish_state(dist);
-            ESP_LOGV(TAG, "Distance: %u mm", dist);
-          } else {
-            ESP_LOGD(TAG, "Invalid reading: %u mm", dist);
-          }
-        } else {
-          ESP_LOGW(TAG, "Read failed at 0x03: %d", (int)err);
-        }
-
-        state_ = 0;  // Reset for next cycle
-      }
-      break;
+  data = (data_buffer[0] << 16) | (data_buffer[1] << 8) | data_buffer[2];
+  float Distance = float(data) / 1000;
+  if (Distance > 4500.00) {
+      return 4500.00;
+  } else {
+      return Distance;
   }
+  return 0;
 }
 
-void SonicI2CComponent::dump_config() {
-  LOG_SENSOR("", "Sonic I2C Sensor", this);
-  LOG_I2C_DEVICE(this);
-  if (this->is_failed()) {
-    ESP_LOGE(TAG, "Communication with I2C device failed!");
+void SonicI2C::setup() {
+  ESP_LOGI(TAG, "Ultrasonic Sensor Setup begin");
+}
+
+void SonicI2C::update() {
+  float result = this->getDistance();
+  if (result >= 4500 || result <= 0.02) {
+    ESP_LOGI(TAG, "Incorrect Distance Reading");
+  } else {
+    ESP_LOGD(TAG, "%s - Got distance: %.2f m", this->name_.c_str(), result);
   }
+  publish_state(result);
 }
 
-}  // namespace sonic_i2c
+}  // namespace sonic_i2c_sensor
 }  // namespace esphome
