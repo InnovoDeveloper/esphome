@@ -3,7 +3,7 @@
 
 namespace esphome {
 static const char *TAG = "sonic_i2c";
-namespace sonic_i2c_sensor {
+namespace sonic_i2c {
 
 void SonicI2C::dump_config() {
   LOG_SENSOR(TAG, "Ultrasonic Sensor", this);
@@ -51,10 +51,11 @@ void SonicI2C::read_distance() {
     publish_state(Distance);
   } else {
     ESP_LOGW(TAG, "I2C Read failed");
+    publish_state(NAN);
   }
 
   this->measurement_in_progress_ = false;
 }
 
-} // namespace sonic_i2c_sensor
+} // namespace sonic_i2c
 } // namespace esphome
