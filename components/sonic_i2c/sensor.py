@@ -1,19 +1,18 @@
+# sensor.py
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor as sensor2, i2c
+from esphome.components import sensor, i2c
 from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     UNIT_METER, 
     ICON_ARROW_EXPAND_VERTICAL,
 )
 
-CONF_I2C_ADDR = 0x57
-
-sonic_sensor_ns = cg.esphome_ns.namespace("sonic_i2c_sensor")
-SonicI2C = sonic_sensor_ns.class_("SonicI2C", sensor2.Sensor, i2c.I2CDevice, cg.PollingComponent)
+sonic_i2c_ns = cg.esphome_ns.namespace("sonic_i2c")
+SonicI2C = sonic_i2c_ns.class_("SonicI2C", sensor.Sensor, i2c.I2CDevice, cg.PollingComponent)
 
 CONFIG_SCHEMA = (
-    sensor2.sensor_schema(
+    sensor.sensor_schema(
         SonicI2C,
         unit_of_measurement=UNIT_METER,
         icon=ICON_ARROW_EXPAND_VERTICAL,
@@ -21,10 +20,10 @@ CONFIG_SCHEMA = (
         state_class=STATE_CLASS_MEASUREMENT,
     )
     .extend(cv.polling_component_schema("60s")
-    .extend(i2c.i2c_device_schema(CONF_I2C_ADDR)))
+    .extend(i2c.i2c_device_schema(0x57)))
 )
 
 async def to_code(config):
-    var = await sensor2.new_sensor(config)
+    var = await sensor.new_sensor(config)
     await cg.register_component(var, config)
     await i2c.register_i2c_device(var, config)
