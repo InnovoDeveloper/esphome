@@ -1,11 +1,11 @@
 {
   "name": "sonic_i2c",
   "files": [
-    "sonic_i2c.py",
+    "__init__.py",
     "sonic_i2c.cpp",
     "sonic_i2c.h"
   ],
   "requirements": [],
-  "domain": "sonic_i2c",
+  "domain": "sonic_i2c_sensor",
   "version": "1.0.0"
 }
