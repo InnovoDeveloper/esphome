@@ -1,13 +1,13 @@
 {
   "name": "Innovo 6 Channel DC Relay",
-  "version": "2025.08.10.0",
+  "version": "2025.08.10.1",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32-C6",
       "ota": {
-        "md5": "d49b41ab131426903d1ea21844039e19",
+        "md5": "c49bfd7db62adcb9821776c3931e4c2b",
         "path": "https://github.com/InnovoDeveloper/esphome/raw/refs/heads/main/innovo-6ch-relay/ota/innovo-6ch-relay.ota.bin",
         "summary": "Innovo 6 Channel DC Relay with Cycle and BTP"
       }
