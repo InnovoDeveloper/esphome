@@ -1,6 +1,6 @@
 {
   "name": "Innovo 6 Channel DC Relay",
-  "version": "2025.08.11.1",
+  "version": "2025.08.11.2",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
