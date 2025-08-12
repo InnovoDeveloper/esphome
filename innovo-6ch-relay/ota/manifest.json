@@ -7,7 +7,7 @@
     {
       "chipFamily": "ESP32-C6",
       "ota": {
-        "md5": "475808387d1851945cfba2cafca9fb17",
+        "md5": "5ff3b6c55384da8a9499d524e1d55fd5",
         "path": "https://raw.githubusercontent.com/InnovoDeveloper/esphome/main/innovo-6ch-relay/ota/innovo-6ch-relay.ota.bin",
         "summary": "Innovo 6 Channel DC Relay with Cycle and BTP"
       }
