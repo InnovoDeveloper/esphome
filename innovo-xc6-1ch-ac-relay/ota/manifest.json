@@ -1,0 +1,16 @@
+{
+  "name": "Innovo 1 Channel AC Relay",
+  "version": "2025.08.18.0",
+  "home_assistant_domain": "esphome",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32-C6",
+      "ota": {
+        "md5": "daad32121bf11798f4299d8f900c08ef",
+        "path": "https://raw.githubusercontent.com/InnovoDeveloper/esphome/main/innovo-xc6-1ch-ac-relay/ota/innovo-xc6-1ch-ac-relay.ota.bin",
+        "summary": "Innovo 1 Channel AC Relay with Cycle and BTP"
+      }
+    }
+  ]
+}
