@@ -1,11 +1,11 @@
 {
   "name": "Innovo Redbox 4 Garage Door Opener",
-  "version": "2025.10.18.03",
+  "version": "2025.10.18.02",
   "builds": [
     {
       "chipFamily": "ESP32-C3",
       "ota": {
-        "sha256": "390d9abce52c6d2d907570b4903556c1ca9eba929d70836ea4ce5c523e68af79",
+        "sha256": "df9f746c3a47c2a5222fa8d9f4cbb805f09e121794cbc54f042828f37d0c13b0",
         "path": "https://raw.githubusercontent.com/InnovoDeveloper/esphome/main/innovo-redbox-4/ota/innovo-redbox-4.ota.bin"
       }
     }
