@@ -1,6 +1,6 @@
 {
   "name": "Innovo Redbox 4 Garage Door Opener",
-  "version": "2025.10.18.02",
+  "version": "2025.10.18.03",
   "builds": [
     {
       "chipFamily": "ESP32-C3",
