@@ -1,6 +1,6 @@
 {
   "name": "Innovo Redbox 4 Garage Door Opener",
-  "version": "2025.06.10.18.04",
+  "version": "2025.10.18.04",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": false,
   "builds": [
