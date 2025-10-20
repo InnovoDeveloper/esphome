@@ -7,7 +7,7 @@
     {
       "chipFamily": "ESP32-C3",
       "ota": {
-        "md5": "53803f5487b663b2d60fac203066ec77",
+        "md5": "aeffb2c4859ee22d946bdde12b87d0b8",
         "path": "https://raw.githubusercontent.com/InnovoDeveloper/esphome/main/innovo-redbox-4/ota/innovo-redbox-4.ota.bin",
         "summary": "Update Innovo Redbox 4 Garage Door Opener"
       }
